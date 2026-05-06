@@ -1,0 +1,144 @@
+services:
+  # --- Backend API ---
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --- Celery Worker ---
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    # Will fail until Phase 5 creates celery_app — that's expected.
+    profiles:
+      - worker
+
+  # --- Celery Beat ---
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    profiles:
+      - worker
+
+  # --- IBKR Bridge ---
+  ibkr-bridge:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: python -m app.bridge.bridge
+    # Will fail until Phase 3 creates the bridge — that's expected.
+    profiles:
+      - bridge
+
+  # --- TWS Gateway (Paper) ---
+  # Uncomment in Phase 3 when IBKR bridge is ready.
+  # Uses the official IB Gateway installer.
+  # tws-gateway-paper:
+  #   image: TODO-official-ib-gateway
+  #   ports:
+  #     - "7497:7497"
+  #   environment:
+  #     - TRADING_MODE=paper
+  #   profiles:
+  #     - ibkr
+
+  # --- TWS Gateway (Live) ---
+  # Only enable when LIVE_TRADING_ENABLED=true (Phase 9).
+  # tws-gateway-live:
+  #   image: TODO-official-ib-gateway
+  #   ports:
+  #     - "7496:7496"
+  #   environment:
+  #     - TRADING_MODE=live
+  #   profiles:
+  #     - ibkr-live
+
+  # --- PostgreSQL ---
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-autotrader}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autotrader}
+      POSTGRES_DB: ${POSTGRES_DB:-autotrader}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autotrader}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Frontend ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    # Will fail until frontend is scaffolded — that's expected.
+    profiles:
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:

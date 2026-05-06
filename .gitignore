@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node.js / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Docker volumes / local data
+postgres_data/
+redis_data/
+
+# Alembic — keep migration scripts, skip cache
+migrations/__pycache__/
+*.resolved
