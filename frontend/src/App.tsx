@@ -4,6 +4,7 @@ import { AppShell } from './components/AppShell';
 import { PortfoliosPage } from './pages/PortfoliosPage';
 import { PortfolioDetailPage } from './pages/PortfolioDetailPage';
 import { StrategiesPage } from './pages/StrategiesPage';
+import { BacktestsPage } from './pages/BacktestsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="/" element={<PortfoliosPage />} />
             <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
             <Route path="/strategies" element={<StrategiesPage />} />
+            <Route path="/backtests" element={<BacktestsPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>
