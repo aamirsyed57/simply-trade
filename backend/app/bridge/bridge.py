@@ -41,6 +41,23 @@ class BridgeService:
         self.ibkr.on_fill = self._on_fill
         self.ibkr.on_status = self._on_order_status
         self.ibkr.on_connection_change = self._on_connection_change
+        self.ibkr.on_account_value = self._on_account_value
+
+        # Tags we want to surface in the API
+        self._account_tags = {
+            "NetLiquidation", "TotalCashValue", "BuyingPower",
+            "UnrealizedPnL", "RealizedPnL", "GrossPositionValue",
+            "DayTradesRemaining", "MaintMarginReq", "AvailableFunds",
+        }
+        self._account_snapshot: dict[str, str] = {}
+
+    def _on_account_value(self, value):
+        if value.tag not in self._account_tags or value.currency != "USD":
+            return
+        self._account_snapshot[value.tag] = value.value
+        asyncio.create_task(
+            self.redis_pub.set("bridge:account_values", json.dumps(self._account_snapshot))
+        )
 
     def _on_connection_change(self, connected: bool):
         event = ConnectionStatusEvent(

@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Callable
 import ib_insync
-from ib_insync import IB, Contract, Order, Trade
+from ib_insync import IB, Contract, Order, Trade, AccountValue
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +13,18 @@ class IBKRConnection:
         self.client_id = client_id
         self.ib = IB()
         self.connected = False
-        
+
         # Callbacks
         self.on_fill: Callable[[Trade, ib_insync.Fill], None] | None = None
         self.on_status: Callable[[Trade], None] | None = None
         self.on_connection_change: Callable[[bool], None] | None = None
+        self.on_account_value: Callable[[AccountValue], None] | None = None
 
         self.ib.connectedEvent += self._on_connected
         self.ib.disconnectedEvent += self._on_disconnected
         self.ib.execDetailsEvent += self._on_exec_details
         self.ib.orderStatusEvent += self._on_order_status
+        self.ib.accountValueEvent += self._on_account_value
 
     async def connect_with_retry(self):
         while not self.connected:
@@ -56,6 +58,10 @@ class IBKRConnection:
     def _on_order_status(self, trade: Trade):
         if self.on_status:
             self.on_status(trade)
+
+    def _on_account_value(self, value: AccountValue):
+        if self.on_account_value:
+            self.on_account_value(value)
 
     def place_order(self, contract: Contract, order: Order) -> Trade:
         if not self.connected:

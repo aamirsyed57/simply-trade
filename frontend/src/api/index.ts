@@ -104,7 +104,20 @@ export interface AccountSummary {
 
 export const accountApi = {
   summary: () => request<AccountSummary>('/account/summary'),
+  ibkr: () => request<IBKRAccountSummary>('/account/ibkr'),
 };
+
+export interface IBKRAccountSummary {
+  net_liquidation: number | null;
+  total_cash: number | null;
+  buying_power: number | null;
+  unrealized_pnl: number | null;
+  realized_pnl: number | null;
+  gross_position_value: number | null;
+  available_funds: number | null;
+  maint_margin_req: number | null;
+  day_trades_remaining: number | null;
+}
 
 export interface Order {
   id: number;

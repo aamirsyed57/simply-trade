@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal } from 'lucide-react';
 import { IBKRStatusIndicator } from './IBKRStatusIndicator';
+import { AccountSummaryBar } from './AccountSummaryBar';
 
 const NAV = [
   { to: '/', label: 'Portfolios', icon: LayoutDashboard },
@@ -72,8 +73,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main */}
-      <main style={{ flex: 1, overflow: 'auto' }}>
-        {children}
+      <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <AccountSummaryBar />
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {children}
+        </div>
       </main>
     </div>
   );
