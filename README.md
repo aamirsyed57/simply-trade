@@ -290,8 +290,8 @@ simply-trade/
 | 4.5 | `ExecutionContext` abstraction (live/paper/backtest routers) | ✅ Complete |
 | 5 | Live execution engine (Celery Beat, OrderManager, fill handler) | ✅ Complete |
 | 5.5 | Backtest engine (SimulatedRouter, fill models, metrics) | ✅ Complete |
-| 6 | Frontend config UI (portfolios, symbols, assignments) | 🔲 Next |
-| 7 | Dashboard + backtest UI | 🔲 Planned |
+| 6 | Frontend config UI (portfolios, symbols, assignments) | ✅ Complete |
+| 7 | Dashboard + backtest UI | 🔲 Next |
 | 7.5 | Telegram notifications | 🔲 Planned |
 | 8 | Hardening (kill switch, Prometheus, EOD reconciliation) | 🔲 Planned |
 | 9 | Live trading enablement | 🔲 Planned |

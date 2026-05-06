@@ -1,0 +1,77 @@
+import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Library, TrendingUp, Activity } from 'lucide-react';
+
+const NAV = [
+  { to: '/', label: 'Portfolios', icon: LayoutDashboard },
+  { to: '/strategies', label: 'Strategies', icon: Library },
+  { to: '/backtests', label: 'Backtests', icon: TrendingUp },
+];
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Sidebar */}
+      <aside style={{
+        width: 220,
+        background: 'var(--bg-surface)',
+        borderRight: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '24px 0',
+        flexShrink: 0,
+      }}>
+        <div style={{ padding: '0 20px 24px', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Activity size={20} color="var(--accent)" />
+            <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+              AutoTrader
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            IBKR Multi-Portfolio Platform
+          </div>
+        </div>
+
+        <nav style={{ flex: 1 }}>
+          {NAV.map(({ to, label, icon: Icon }) => {
+            const active = pathname === to || (to !== '/' && pathname.startsWith(to));
+            return (
+              <Link
+                key={to}
+                to={to}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '9px 20px',
+                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                  background: active ? 'rgba(79,125,243,0.12)' : 'transparent',
+                  borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                  textDecoration: 'none',
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 400,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <Icon size={16} />
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
+          Phase 5.5 Complete
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main style={{ flex: 1, overflow: 'auto' }}>
+        {children}
+      </main>
+    </div>
+  );
+}
