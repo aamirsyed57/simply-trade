@@ -106,7 +106,7 @@ function PriceChart({ bars }: { bars: BarRow[] }) {
 // CSV Upload Drop Zone
 // ──────────────────────────────────────────────────────────
 function UploadZone({
-  symbolId, ticker, onSuccess,
+  symbolId, ticker: _ticker, onSuccess,
 }: { symbolId: number; ticker: string; onSuccess: () => void }) {
   const [isDragging, setIsDragging] = useState(false);
   const [timeframe, setTimeframe] = useState('1d');

@@ -105,3 +105,39 @@ export interface AccountSummary {
 export const accountApi = {
   summary: () => request<AccountSummary>('/account/summary'),
 };
+
+export interface Order {
+  id: number;
+  client_order_id: string;
+  ibkr_order_id: number | null;
+  portfolio_id: number;
+  symbol_id: number;
+  strategy_code: string;
+  side: 'BUY' | 'SELL';
+  qty: number;
+  order_type: 'MKT' | 'LMT';
+  limit_price: number | null;
+  status: 'PENDING' | 'SUBMITTED' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'FAILED';
+  order_ref: string;
+  reserved_cash: number;
+  execution_mode: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateOrderPayload {
+  portfolio_id: number;
+  symbol_id: number;
+  strategy_code: string;
+  side: 'BUY' | 'SELL';
+  qty: number;
+  order_type: 'MKT' | 'LMT';
+  limit_price?: number;
+}
+
+export const orderApi = {
+  list: (portfolioId?: number) => request<Order[]>(portfolioId ? `/orders?portfolio_id=${portfolioId}` : '/orders'),
+  create: (data: CreateOrderPayload) => request<Order>('/orders', { method: 'POST', body: JSON.stringify(data) }),
+  get: (orderId: number) => request<Order>(`/orders/${orderId}`),
+  cancel: (orderId: number) => request<Order>(`/orders/${orderId}/cancel`, { method: 'PATCH' }),
+};
