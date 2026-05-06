@@ -59,7 +59,7 @@ export function PortfolioDetailPage() {
   const positionMap = Object.fromEntries(positions.map(p => [p.symbol_id, p]));
   const pendingBySymbol: Record<number, Order[]> = {};
   for (const o of orders) {
-    if (o.status === 'PENDING' || o.status === 'SUBMITTED') {
+    if (o.status === 'pending' || o.status === 'submitted') {
       (pendingBySymbol[o.symbol_id] ??= []).push(o);
     }
   }

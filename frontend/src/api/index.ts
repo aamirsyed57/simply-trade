@@ -117,7 +117,7 @@ export interface Order {
   qty: number;
   order_type: 'MKT' | 'LMT';
   limit_price: number | null;
-  status: 'PENDING' | 'SUBMITTED' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'FAILED';
+  status: 'pending' | 'submitted' | 'partially_filled' | 'filled' | 'cancelled' | 'rejected';
   order_ref: string;
   reserved_cash: number;
   execution_mode: string;
