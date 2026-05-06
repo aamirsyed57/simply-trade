@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { accountApi } from '../api/index';
+import { accountApi, orderApi } from '../api/index';
 
 function fmt(v: number | null, opts?: Intl.NumberFormatOptions) {
   if (v === null || v === undefined) return '—';
@@ -28,10 +28,18 @@ export function AccountSummaryBar() {
     retry: false,
   });
 
+  const { data: orders = [] } = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => orderApi.list(),
+    refetchInterval: 15_000,
+  });
+
+  const pendingCount = orders.filter(o => o.status === 'pending' || o.status === 'submitted').length;
+
   if (isError || !data) return null;
 
   const allNull = Object.values(data).every(v => v === null);
-  if (allNull) return null;
+  if (allNull && pendingCount === 0) return null;
 
   const dayPnl = (data.unrealized_pnl ?? 0) + (data.realized_pnl ?? 0);
 
@@ -47,6 +55,11 @@ export function AccountSummaryBar() {
       flexShrink: 0,
       gap: 0,
     }}>
+      <Tile
+        label="Pending Orders"
+        value={String(pendingCount)}
+        color={pendingCount > 0 ? '#f59e0b' : 'var(--text-muted)'}
+      />
       <Tile label="NAV" value={fmt(data.net_liquidation)} />
       <Tile label="Cash" value={fmt(data.total_cash)} />
       <Tile label="Buying Power" value={fmt(data.buying_power)} />
