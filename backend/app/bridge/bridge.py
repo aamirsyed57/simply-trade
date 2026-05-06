@@ -40,6 +40,7 @@ class BridgeService:
         
         self.ibkr.on_fill = self._on_fill
         self.ibkr.on_status = self._on_order_status
+        self.ibkr.on_open_order = self._on_open_order
         self.ibkr.on_connection_change = self._on_connection_change
         self.ibkr.on_account_value = self._on_account_value
 
@@ -81,17 +82,8 @@ class BridgeService:
         )
         asyncio.create_task(self.redis_pub.publish(CHANNEL_FILLS, event.model_dump_json()))
 
-    def _on_order_status(self, trade: Trade):
-        event = OrderStatusEvent(
-            order_ref=trade.order.orderRef,
-            ibkr_order_id=trade.order.orderId,
-            status=trade.orderStatus.status,
-            filled=float(trade.orderStatus.filled),
-            remaining=float(trade.orderStatus.remaining),
-            avg_fill_price=float(trade.orderStatus.avgFillPrice),
-        )
-        asyncio.create_task(self.redis_pub.publish(CHANNEL_ORDER_STATUS, event.model_dump_json()))
-
+    def _update_order_snapshot(self, trade: Trade) -> None:
+        """Maintain the bridge:ibkr_orders Redis hash used by the API."""
         ibkr_order_id = trade.order.orderId
         status = trade.orderStatus.status
         if status in ("Filled", "Cancelled", "Inactive"):
@@ -112,6 +104,33 @@ class BridgeService:
                 "avg_fill_price": float(trade.orderStatus.avgFillPrice),
             })
             asyncio.create_task(self.redis_pub.hset("bridge:ibkr_orders", str(ibkr_order_id), order_data))
+
+    def _on_open_order(self, trade: Trade) -> None:
+        """Fires for every open order on connect — seeds the snapshot hash."""
+        self._update_order_snapshot(trade)
+        # Backfill ibkr_order_id for platform orders whose DB row may have missed it
+        if trade.order.orderRef and trade.order.orderRef.startswith("pf:"):
+            event = OrderStatusEvent(
+                order_ref=trade.order.orderRef,
+                ibkr_order_id=trade.order.orderId,
+                status=trade.orderStatus.status,
+                filled=float(trade.orderStatus.filled),
+                remaining=float(trade.orderStatus.remaining),
+                avg_fill_price=float(trade.orderStatus.avgFillPrice),
+            )
+            asyncio.create_task(self.redis_pub.publish(CHANNEL_ORDER_STATUS, event.model_dump_json()))
+
+    def _on_order_status(self, trade: Trade) -> None:
+        event = OrderStatusEvent(
+            order_ref=trade.order.orderRef,
+            ibkr_order_id=trade.order.orderId,
+            status=trade.orderStatus.status,
+            filled=float(trade.orderStatus.filled),
+            remaining=float(trade.orderStatus.remaining),
+            avg_fill_price=float(trade.orderStatus.avgFillPrice),
+        )
+        asyncio.create_task(self.redis_pub.publish(CHANNEL_ORDER_STATUS, event.model_dump_json()))
+        self._update_order_snapshot(trade)
 
     async def _handle_order_request(self, event_data: str):
         try:
@@ -181,14 +200,15 @@ class BridgeService:
                     await self._handle_emergency(data)
 
     async def _check_initial_connection(self):
-        # We need to wait until connected to reqAccountUpdates
-        # But we don't want to block the bridge start
         while not self.ibkr.connected:
             await asyncio.sleep(1)
         try:
             self.ibkr.ib.reqAccountUpdates(True)
+            # Trigger openOrderEvent for all existing IBKR open orders so
+            # _on_open_order populates bridge:ibkr_orders on startup.
+            self.ibkr.ib.reqOpenOrders()
         except Exception as e:
-            logger.error(f"Failed to request account updates: {e}")
+            logger.error(f"Failed to request initial data: {e}")
 
     async def start(self):
         logger.info("Starting IBKR Bridge...")
