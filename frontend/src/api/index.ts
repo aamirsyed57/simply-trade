@@ -142,6 +142,8 @@ export const orderApi = {
   cancel: (orderId: number) => request<Order>(`/orders/${orderId}/cancel`, { method: 'PATCH' }),
   fill: (orderId: number, fillPrice: number) =>
     request<Order>(`/orders/${orderId}/fill`, { method: 'POST', body: JSON.stringify({ fill_price: fillPrice }) }),
+  retry: (orderId: number) =>
+    request<Order>(`/orders/${orderId}/retry`, { method: 'POST' }),
 };
 
 export interface Position {

@@ -6,13 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+import redis.asyncio as aioredis
 
+from app.config import settings
 from app.database import get_db
 from app.models.order import Order, OrderStatus
 from app.models.portfolio import Portfolio
 from app.models.symbol import Symbol
 from app.schemas.order import OrderCreate, OrderRead, ManualFillRequest
 from app.services.order_service import OrderManager
+from app.bridge.events import CHANNEL_ORDER_REQUESTS, OrderRequestEvent
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -82,6 +85,52 @@ async def get_order(order_id: int, db: AsyncSession = Depends(get_db)):
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+
+@router.post(
+    "/{order_id}/retry",
+    response_model=OrderRead,
+    summary="Re-submit a pending order to the IBKR bridge via Redis",
+)
+async def retry_order(order_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Order).options(selectinload(Order.fills)).where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status not in (OrderStatus.PENDING, OrderStatus.SUBMITTED):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot retry order with status '{order.status.value}'",
+        )
+    if order.ibkr_order_id is not None:
+        raise HTTPException(status_code=422, detail="Order already has an IBKR order ID")
+
+    symbol = await db.get(Symbol, order.symbol_id)
+    if symbol is None:
+        raise HTTPException(status_code=404, detail="Symbol not found")
+
+    event = OrderRequestEvent(
+        portfolio_id=order.portfolio_id,
+        strategy_code=order.strategy_code,
+        symbol_id=order.symbol_id,
+        ticker=symbol.ticker,
+        exchange=symbol.exchange,
+        action=order.side.value,
+        order_type=order.order_type.value,
+        total_quantity=float(order.qty),
+        limit_price=float(order.limit_price) if order.limit_price else None,
+        mode=order.execution_mode,
+    )
+
+    r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    try:
+        await r.publish(CHANNEL_ORDER_REQUESTS, event.model_dump_json())
+    finally:
+        await r.aclose()
+
     return order
 
 
