@@ -6,5 +6,6 @@
 - **All walkthroughs** (post‑implementation summaries) must also be stored in the `docs/` directory. Walkthrough files should be named with a clear prefix, e.g., `walkthrough_<phase>.md`.
 - When creating a new plan or walkthrough, ensure the file is committed to the repository and reflected in the `docs/` folder.
 - Existing plans and walkthroughs that reside outside `docs/` should be moved or duplicated into `docs/` to comply with the rule.
+- Always update the `README.md` file to reflect the current status of the project (e.g., completed phases, next steps, known issues).
 
 These rules help keep project documentation centralized, searchable, and version‑controlled.
