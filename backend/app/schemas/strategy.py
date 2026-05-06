@@ -9,6 +9,7 @@ class StrategyRead(APIModel):
     code: str
     name: str
     description: str
+    documentation_url: str | None = None
     params_schema: dict
     default_params: dict
     created_at: datetime

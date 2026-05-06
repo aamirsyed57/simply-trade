@@ -21,6 +21,7 @@ class SentimentMomentumStrategy(BaseStrategy):
     code = "sentiment_momentum"
     name = "Sentiment Momentum"
     description = "News-driven entry combining NLP sentiment scores with price momentum."
+    documentation_url = "https://www.investopedia.com/terms/m/momentum_investing.asp"
     ParamsModel = SentimentMomentumParams
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:

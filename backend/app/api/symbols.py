@@ -24,6 +24,28 @@ async def list_symbols(db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
+@router.get("/search", summary="Search for symbols using Yahoo Finance")
+async def search_symbols(q: str):
+    import yfinance as yf
+    try:
+        search = yf.Search(q)
+        results = search.quotes
+        # Return simplified list of suggestions
+        return [
+            {
+                "ticker": r.get("symbol"),
+                "exchange": r.get("exchDisp") or r.get("exchange"),
+                "name": r.get("shortname") or r.get("longname", ""),
+                "type": r.get("quoteType", ""),
+            }
+            for r in results
+            if r.get("symbol")
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @router.post("", response_model=SymbolRead, status_code=status.HTTP_201_CREATED, summary="Register a new symbol")
 async def create_symbol(data: SymbolCreate, db: AsyncSession = Depends(get_db)):
     # Check for duplicate (ticker, exchange)

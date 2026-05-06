@@ -32,7 +32,7 @@ export function PortfolioDetailPage() {
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
 
   const deleteMutation = useMutation({
-    mutationFn: (aid: number) => assignmentApi.delete(portfolioId, aid),
+    mutationFn: (assignmentId: number) => assignmentApi.delete(assignmentId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['assignments', portfolioId] }),
   });
 

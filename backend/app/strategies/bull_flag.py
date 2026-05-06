@@ -22,6 +22,7 @@ class BullFlagStrategy(BaseStrategy):
     code = "bull_flag"
     name = "Bull Flag Breakout"
     description = "Trades a breakout from a tight consolidation following a strong impulse."
+    documentation_url = "https://www.investopedia.com/terms/f/flag.asp"
     ParamsModel = BullFlagParams
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:

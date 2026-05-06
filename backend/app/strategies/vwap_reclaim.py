@@ -22,6 +22,7 @@ class VwapReclaimStrategy(BaseStrategy):
     code = "vwap_reclaim"
     name = "VWAP Reclaim"
     description = "Trades a momentum reclaim of the VWAP after a significant pullback."
+    documentation_url = "https://www.investopedia.com/terms/v/vwap.asp"
     ParamsModel = VwapReclaimParams
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:

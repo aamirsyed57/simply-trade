@@ -15,6 +15,7 @@ class BaseStrategy(ABC):
     code: str
     name: str
     description: str
+    documentation_url: str | None = None
     ParamsModel: Type[BaseModel]
 
     def __init__(self, params: dict):

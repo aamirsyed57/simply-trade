@@ -31,7 +31,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.workers.celery_app worker --loglevel=info
+    command: >
+      sh -c "mkdir -p logs && celery -A app.workers.celery_app worker --loglevel=info 2>&1 | tee logs/worker.log"
     # Will fail until Phase 5 creates celery_app — that's expected.
     profiles:
       - worker
@@ -48,7 +49,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: celery -A app.workers.celery_app beat --loglevel=info
+    command: >
+      sh -c "mkdir -p logs && celery -A app.workers.celery_app beat --loglevel=info 2>&1 | tee logs/beat.log"
     profiles:
       - worker
 
@@ -67,9 +69,9 @@ services:
       postgres:
         condition: service_healthy
     command: python -m app.bridge.bridge
-    # Will fail until Phase 3 creates the bridge — that's expected.
-    profiles:
-      - bridge
+    # Will fail connection until TWS is running on the host
+    # profiles:
+    #   - bridge
 
   # --- TWS Gateway (Paper) ---
   # Uncomment in Phase 3 when IBKR bridge is ready.

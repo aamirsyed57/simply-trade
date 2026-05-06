@@ -10,6 +10,7 @@ export default defineConfig({
     proxy: {
       '/api': `http://${apiHost}:8000`,
       '/docs': `http://${apiHost}:8000`,
+      '/ops': `http://${apiHost}:8000`,
     },
   },
 })

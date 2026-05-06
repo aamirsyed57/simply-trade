@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { ExternalLink } from 'lucide-react';
 import { strategyApi } from '../api/index';
 
 export function StrategiesPage() {
@@ -48,6 +49,19 @@ export function StrategiesPage() {
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                   {s.description}
                 </p>
+                {s.documentation_url && (
+                  <a
+                    href={s.documentation_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
+                      fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500
+                    }}
+                  >
+                    Learn more <ExternalLink size={12} />
+                  </a>
+                )}
               </div>
 
               {/* Params */}

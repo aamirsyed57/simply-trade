@@ -20,6 +20,7 @@ class PortfolioCreate(APIModel):
 class PortfolioUpdate(APIModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     status: PortfolioStatus | None = None
+    budget_total: Decimal | None = Field(None, gt=0)
     description: str | None = None
 
 

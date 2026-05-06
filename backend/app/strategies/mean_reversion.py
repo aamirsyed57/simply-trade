@@ -22,6 +22,7 @@ class MeanReversionStrategy(BaseStrategy):
     code = "mean_reversion"
     name = "Mean Reversion"
     description = "Fades extremes using Z-score on a moving baseline."
+    documentation_url = "https://www.investopedia.com/terms/m/meanreversion.asp"
     ParamsModel = MeanReversionParams
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:

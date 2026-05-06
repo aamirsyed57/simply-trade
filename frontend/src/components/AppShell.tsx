@@ -1,11 +1,14 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Library, TrendingUp, Activity } from 'lucide-react';
+import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal } from 'lucide-react';
+import { IBKRStatusIndicator } from './IBKRStatusIndicator';
 
 const NAV = [
   { to: '/', label: 'Portfolios', icon: LayoutDashboard },
   { to: '/strategies', label: 'Strategies', icon: Library },
   { to: '/backtests', label: 'Backtests', icon: TrendingUp },
+  { to: '/historical', label: 'Historical Data', icon: Database },
+  { to: '/logs', label: 'Worker Logs', icon: Terminal },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -63,8 +66,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
-          Phase 5.5 Complete
+        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: 8, paddingBottom: 8 }}>
+          <IBKRStatusIndicator />
         </div>
       </aside>
 

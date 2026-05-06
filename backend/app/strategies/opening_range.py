@@ -22,6 +22,7 @@ class OpeningRangeStrategy(BaseStrategy):
     code = "opening_range"
     name = "Opening Range Breakout"
     description = "Trades the breakout of the first N-minute range with volume."
+    documentation_url = "https://www.investopedia.com/articles/trading/05/030205.asp"
     ParamsModel = OpeningRangeParams
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:

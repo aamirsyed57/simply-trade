@@ -22,6 +22,7 @@ class GapAndGoStrategy(BaseStrategy):
     code = "gap_and_go"
     name = "Gap and Go"
     description = "Trades momentum on morning gaps with volume confirmation."
+    documentation_url = "https://www.investopedia.com/terms/g/gap.asp"
     ParamsModel = GapAndGoParams
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:

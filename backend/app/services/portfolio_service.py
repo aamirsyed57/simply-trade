@@ -59,6 +59,13 @@ class PortfolioService:
             pf.status = data.status
         if data.description is not None:
             pf.description = data.description
+        if data.budget_total is not None:
+            if data.budget_total < pf.cash_reserved + pf.cash_deployed:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Budget cannot be lower than deployed+reserved cash ({pf.cash_reserved + pf.cash_deployed})"
+                )
+            pf.budget_total = data.budget_total
         await db.flush()
         await db.refresh(pf)
         return pf

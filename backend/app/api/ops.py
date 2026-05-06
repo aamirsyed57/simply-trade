@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 import json
+import os
 import redis.asyncio as redis
 from app.config import settings
 from app.bridge.events import CHANNEL_EMERGENCY, EmergencyEvent
@@ -79,3 +80,22 @@ async def kill_switch():
         "live_trading_enabled": False,
         "message": "Kill switch activated. Sent cancel_all to bridge.",
     }
+
+
+@router.get(
+    "/logs/worker",
+    summary="Fetch recent worker logs",
+)
+async def worker_logs(lines: int = 200):
+    """Returns the last N lines of the celery worker log."""
+    log_path = "/app/logs/worker.log"
+    if not os.path.exists(log_path):
+        return {"logs": ["Worker logs not available yet."]}
+    
+    try:
+        # A simple python-based tail equivalent
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.readlines()
+            return {"logs": content[-lines:]}
+    except Exception as e:
+        return {"logs": [f"Error reading logs: {str(e)}"]}

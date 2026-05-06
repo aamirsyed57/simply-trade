@@ -1,4 +1,4 @@
-"""Backtests API — create, query, and retrieve results."""
+"""Backtests API — create, query, retrieve results, and run inline."""
 
 from datetime import date
 from typing import Any
@@ -22,7 +22,7 @@ class BacktestCreate(BaseModel):
     strategy_code: str
     params: dict = {}
     symbol_ids: list[int]
-    timeframe: str = "1m"
+    timeframe: str = "1d"
     start_date: date
     end_date: date
     initial_capital: float = 100_000.0
@@ -61,7 +61,7 @@ class BacktestResultRead(BaseModel):
 
 @router.post("", response_model=BacktestRead, status_code=status.HTTP_202_ACCEPTED)
 async def create_backtest(payload: BacktestCreate, db: AsyncSession = Depends(get_db)):
-    """Create a new backtest and enqueue it for execution."""
+    """Create a new backtest and enqueue it for execution via Celery."""
     from app.strategies import STRATEGY_REGISTRY
     if payload.strategy_code not in STRATEGY_REGISTRY:
         raise HTTPException(
@@ -87,8 +87,62 @@ async def create_backtest(payload: BacktestCreate, db: AsyncSession = Depends(ge
     await db.commit()
     await db.refresh(backtest)
 
-    # Enqueue async
     enqueue_backtest.delay(backtest.id)
+    return backtest
+
+
+@router.post(
+    "/run-inline",
+    response_model=BacktestRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create and run a backtest synchronously (no Celery required)",
+    description=(
+        "Creates and immediately executes a backtest within this HTTP request. "
+        "Use when Celery workers are not running (local dev / single-container). "
+        "The response is returned once the backtest completes or fails."
+    ),
+)
+async def create_and_run_inline(payload: BacktestCreate, db: AsyncSession = Depends(get_db)):
+    from app.strategies import STRATEGY_REGISTRY
+    from app.backtest.engine import BacktestEngine
+
+    if payload.strategy_code not in STRATEGY_REGISTRY:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown strategy code: {payload.strategy_code}",
+        )
+
+    backtest = Backtest(
+        name=payload.name,
+        strategy_code=payload.strategy_code,
+        params=payload.params,
+        symbol_ids=payload.symbol_ids,
+        timeframe=payload.timeframe,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        initial_capital=payload.initial_capital,
+        fill_model=payload.fill_model,
+        slippage_bps=payload.slippage_bps,
+        commission_model=payload.commission_model,
+        status=BacktestStatus.PENDING,
+    )
+    db.add(backtest)
+    await db.commit()
+    await db.refresh(backtest)
+
+    engine = BacktestEngine(db)
+    try:
+        await engine.run(backtest.id)
+        await db.commit()
+        await db.refresh(backtest)
+    except Exception as exc:
+        await db.commit()
+        await db.refresh(backtest)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Backtest failed: {exc}",
+        )
+
     return backtest
 
 

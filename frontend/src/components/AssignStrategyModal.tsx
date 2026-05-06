@@ -29,8 +29,8 @@ export function AssignStrategyModal({ portfolioId, existing, onClose }: Props) {
   const mutation = useMutation({
     mutationFn: (data: CreateAssignmentPayload) =>
       existing
-        ? assignmentApi.patch(portfolioId, existing.id, data)
-        : assignmentApi.create(portfolioId, data),
+        ? assignmentApi.patch(existing.id, data)
+        : assignmentApi.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assignments', portfolioId] });
       qc.invalidateQueries({ queryKey: ['portfolios'] });
@@ -51,7 +51,7 @@ export function AssignStrategyModal({ portfolioId, existing, onClose }: Props) {
     if (!symbolId || !stratCode) return setError('Symbol and strategy are required');
     const alloc = parseFloat(allocation);
     if (isNaN(alloc) || alloc <= 0) return setError('Allocation must be > 0');
-    mutation.mutate({ symbol_id: parseInt(symbolId), strategy_code: stratCode, params, allocation: alloc });
+    mutation.mutate({ portfolio_id: portfolioId, symbol_id: parseInt(symbolId), strategy_code: stratCode, params, allocation: alloc });
   };
 
   return (
