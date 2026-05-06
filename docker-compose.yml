@@ -74,14 +74,14 @@ services:
   # --- TWS Gateway (Paper) ---
   # Uncomment in Phase 3 when IBKR bridge is ready.
   # Uses the official IB Gateway installer.
-  # tws-gateway-paper:
-  #   image: TODO-official-ib-gateway
-  #   ports:
-  #     - "7497:7497"
-  #   environment:
-  #     - TRADING_MODE=paper
-  #   profiles:
-  #     - ibkr
+  tws-gateway-paper:
+    image: TODO-official-ib-gateway
+    ports:
+      - "7497:7497"
+    environment:
+      - TRADING_MODE=paper
+    profiles:
+      - ibkr
 
   # --- TWS Gateway (Live) ---
   # Only enable when LIVE_TRADING_ENABLED=true (Phase 9).

@@ -2,6 +2,10 @@
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+import json
+import redis.asyncio as redis
+from app.config import settings
+from app.bridge.events import CHANNEL_EMERGENCY, EmergencyEvent
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -30,25 +34,48 @@ async def health():
 @router.get(
     "/ibkr/status",
     response_model=IBKRStatusResponse,
-    summary="IBKR bridge connection status (stub — Phase 3)",
+    summary="IBKR bridge connection status",
 )
 async def ibkr_status():
+    r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+    val = await r.get("bridge:connection_status")
+    await r.aclose()
+    
+    if val:
+        try:
+            status = json.loads(val)
+            return {
+                "connected": status.get("connected", False),
+                "paper_gateway": "connected" if status.get("gateway_mode") == "paper" else "disconnected",
+                "live_gateway": "not connected — Phase 3",
+                "note": status.get("note", "Connected to bridge"),
+            }
+        except Exception:
+            pass
+            
     return {
         "connected": False,
-        "paper_gateway": "not connected — Phase 3",
-        "live_gateway": "not connected — Phase 3",
-        "note": "IBKR bridge will be implemented in Phase 3",
+        "paper_gateway": "unknown",
+        "live_gateway": "unknown",
+        "note": "Bridge not responding",
     }
 
 
 @router.post(
     "/kill-switch",
     response_model=KillSwitchResponse,
-    summary="Emergency kill switch — halt all live trading (stub — Phase 8)",
+    summary="Emergency kill switch — halt all live trading",
 )
 async def kill_switch():
-    # Phase 8: set LIVE_TRADING_ENABLED=false in Redis and cancel all open orders
+    r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+    event = EmergencyEvent(action="cancel_all")
+    await r.publish(CHANNEL_EMERGENCY, event.model_dump_json())
+    
+    # Phase 8: set LIVE_TRADING_ENABLED=false in Redis
+    await r.set("ops:live_trading_enabled", "false")
+    await r.aclose()
+    
     return {
         "live_trading_enabled": False,
-        "message": "Kill switch stub — full implementation in Phase 8",
+        "message": "Kill switch activated. Sent cancel_all to bridge.",
     }
