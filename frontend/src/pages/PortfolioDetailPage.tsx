@@ -114,7 +114,7 @@ export function PortfolioDetailPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-                {['Symbol', 'Strategy', 'Allocation', 'Params', 'Position', 'Pending', 'Status', 'Actions'].map(h => (
+                {['Symbol', 'Strategy', 'Allocation', 'Capital Used', 'Params', 'Position', 'Pending', 'Status', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
@@ -137,6 +137,22 @@ export function PortfolioDetailPage() {
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{a.strategy_code}</div>
                     </td>
                     <td style={td}><span style={{ fontWeight: 600 }}>{fmt(a.allocation)}</span></td>
+                    <td style={td}>
+                      {(() => {
+                        const mv = positionMap[a.symbol_id]?.market_value ?? 0;
+                        const pct = a.allocation > 0 ? Math.min((mv / a.allocation) * 100, 100) : 0;
+                        const barColor = pct > 90 ? '#f59e0b' : '#4f7df3';
+                        return (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 600 }}>{fmtPx(mv)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ {fmt(a.allocation)}</span></div>
+                            <div style={{ marginTop: 4, height: 4, borderRadius: 2, background: 'var(--border)', width: 80 }}>
+                              <div style={{ height: '100%', borderRadius: 2, background: barColor, width: `${pct}%` }} />
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{pct.toFixed(0)}% deployed</div>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td style={td}>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {Object.entries(a.params ?? {}).map(([k, v]) => `${k}=${v}`).join(', ') || '—'}
