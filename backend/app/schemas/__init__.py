@@ -1,0 +1,1 @@
+# AutoTrader API schemas package
