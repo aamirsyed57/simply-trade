@@ -174,3 +174,41 @@ export interface Position {
 export const positionApi = {
   list: (portfolioId: number) => request<Position[]>(`/portfolios/${portfolioId}/positions`),
 };
+
+export interface IBKROrderEntry {
+  ibkr_order_id: number;
+  order_ref: string;
+  ticker: string;
+  exchange: string;
+  action: 'BUY' | 'SELL';
+  order_type: 'MKT' | 'LMT';
+  total_quantity: number;
+  limit_price: number | null;
+  status: string;
+  filled: number;
+  remaining: number;
+  avg_fill_price: number;
+  is_platform_order: boolean;
+}
+
+export interface IBKRDBOrphan {
+  id: number;
+  order_ref: string;
+  side: string;
+  qty: number;
+  order_type: string;
+  status: string;
+  created_at: string;
+  portfolio_id: number;
+  symbol_id: number;
+  strategy_code: string;
+}
+
+export interface IBKROrdersResponse {
+  ibkr_orders: IBKROrderEntry[];
+  db_orphans: IBKRDBOrphan[];
+}
+
+export const ibkrOrdersApi = {
+  list: () => request<IBKROrdersResponse>('/account/ibkr-orders'),
+};

@@ -11,6 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.portfolio import Portfolio
 from app.models.position import VirtualPosition
+from app.models.order import Order, OrderStatus
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -104,3 +105,99 @@ async def get_ibkr_account():
         maint_margin_req=f("MaintMarginReq"),
         day_trades_remaining=f("DayTradesRemaining"),
     )
+
+
+class IBKROrderEntry(BaseModel):
+    ibkr_order_id: int
+    order_ref: str
+    ticker: str
+    exchange: str
+    action: str
+    order_type: str
+    total_quantity: float
+    limit_price: float | None
+    status: str
+    filled: float
+    remaining: float
+    avg_fill_price: float
+    is_platform_order: bool
+
+
+class IBKRDBOrphan(BaseModel):
+    id: int
+    order_ref: str
+    side: str
+    qty: float
+    order_type: str
+    status: str
+    created_at: str
+    portfolio_id: int
+    symbol_id: int
+    strategy_code: str
+
+
+class IBKROrdersResponse(BaseModel):
+    ibkr_orders: list[IBKROrderEntry]
+    db_orphans: list[IBKRDBOrphan]
+
+
+@router.get("/ibkr-orders", response_model=IBKROrdersResponse, summary="Live IBKR open orders + DB orphans")
+async def get_ibkr_orders(db: AsyncSession = Depends(get_db)):
+    r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    try:
+        raw_hash = await r.hgetall("bridge:ibkr_orders")
+    finally:
+        await r.aclose()
+
+    parsed: list[dict] = []
+    for raw_val in raw_hash.values():
+        try:
+            parsed.append(json.loads(raw_val))
+        except Exception:
+            continue
+
+    ibkr_ids = [int(entry["ibkr_order_id"]) for entry in parsed]
+
+    known_ids: set[int] = set()
+    if ibkr_ids:
+        result = await db.execute(
+            select(Order.ibkr_order_id).where(Order.ibkr_order_id.in_(ibkr_ids))
+        )
+        known_ids = {row[0] for row in result.all()}
+
+    ibkr_orders = [
+        IBKROrderEntry(
+            **entry,
+            is_platform_order=(
+                int(entry["ibkr_order_id"]) in known_ids
+                and entry.get("order_ref", "").startswith("pf:")
+            ),
+        )
+        for entry in parsed
+    ]
+
+    orphan_result = await db.execute(
+        select(Order).where(
+            Order.status.in_([OrderStatus.PENDING, OrderStatus.SUBMITTED]),
+            Order.ibkr_order_id.is_(None),
+        )
+    )
+    orphan_rows = orphan_result.scalars().all()
+
+    db_orphans = [
+        IBKRDBOrphan(
+            id=o.id,
+            order_ref=o.order_ref,
+            side=o.side.value,
+            qty=float(o.qty),
+            order_type=o.order_type.value,
+            status=o.status.value,
+            created_at=o.created_at.isoformat(),
+            portfolio_id=o.portfolio_id,
+            symbol_id=o.symbol_id,
+            strategy_code=o.strategy_code,
+        )
+        for o in orphan_rows
+    ]
+
+    return IBKROrdersResponse(ibkr_orders=ibkr_orders, db_orphans=db_orphans)

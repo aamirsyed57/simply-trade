@@ -92,6 +92,27 @@ class BridgeService:
         )
         asyncio.create_task(self.redis_pub.publish(CHANNEL_ORDER_STATUS, event.model_dump_json()))
 
+        ibkr_order_id = trade.order.orderId
+        status = trade.orderStatus.status
+        if status in ("Filled", "Cancelled", "Inactive"):
+            asyncio.create_task(self.redis_pub.hdel("bridge:ibkr_orders", str(ibkr_order_id)))
+        else:
+            order_data = json.dumps({
+                "ibkr_order_id": ibkr_order_id,
+                "order_ref": trade.order.orderRef or "",
+                "ticker": trade.contract.symbol,
+                "exchange": trade.contract.exchange,
+                "action": trade.order.action,
+                "order_type": trade.order.orderType,
+                "total_quantity": float(trade.order.totalQuantity),
+                "limit_price": float(trade.order.lmtPrice) if trade.order.lmtPrice else None,
+                "status": status,
+                "filled": float(trade.orderStatus.filled),
+                "remaining": float(trade.orderStatus.remaining),
+                "avg_fill_price": float(trade.orderStatus.avgFillPrice),
+            })
+            asyncio.create_task(self.redis_pub.hset("bridge:ibkr_orders", str(ibkr_order_id), order_data))
+
     async def _handle_order_request(self, event_data: str):
         try:
             req = OrderRequestEvent.model_validate_json(event_data)
