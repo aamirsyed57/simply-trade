@@ -140,6 +140,8 @@ export const orderApi = {
   create: (data: CreateOrderPayload) => request<Order>('/orders', { method: 'POST', body: JSON.stringify(data) }),
   get: (orderId: number) => request<Order>(`/orders/${orderId}`),
   cancel: (orderId: number) => request<Order>(`/orders/${orderId}/cancel`, { method: 'PATCH' }),
+  fill: (orderId: number, fillPrice: number) =>
+    request<Order>(`/orders/${orderId}/fill`, { method: 'POST', body: JSON.stringify({ fill_price: fillPrice }) }),
 };
 
 export interface Position {

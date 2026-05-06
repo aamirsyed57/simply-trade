@@ -1,6 +1,7 @@
 """Orders router — order submission (stub in Phase 2; real execution in Phase 5)."""
 
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,8 @@ from app.database import get_db
 from app.models.order import Order, OrderStatus
 from app.models.portfolio import Portfolio
 from app.models.symbol import Symbol
-from app.schemas.order import OrderCreate, OrderRead
+from app.schemas.order import OrderCreate, OrderRead, ManualFillRequest
+from app.services.order_service import OrderManager
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -81,6 +83,44 @@ async def get_order(order_id: int, db: AsyncSession = Depends(get_db)):
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
+
+
+@router.post(
+    "/{order_id}/fill",
+    response_model=OrderRead,
+    summary="Manually fill a pending order (used before Phase 5 bridge is live)",
+)
+async def fill_order(order_id: int, data: ManualFillRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Order).options(selectinload(Order.fills)).where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status not in (OrderStatus.PENDING, OrderStatus.SUBMITTED):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot fill order with status '{order.status.value}'",
+        )
+
+    # Ensure order is SUBMITTED before the fill handler runs
+    order.status = OrderStatus.SUBMITTED
+    await db.flush()
+
+    om = OrderManager(db)
+    await om.handle_fill(
+        order_ref=order.order_ref,
+        ibkr_exec_id=f"manual-{uuid.uuid4()}",
+        qty=float(order.qty),
+        price=float(data.fill_price),
+        commission=0.0,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    result = await db.execute(
+        select(Order).options(selectinload(Order.fills)).where(Order.id == order_id)
+    )
+    return result.scalar_one()
 
 
 @router.patch("/{order_id}/cancel", response_model=OrderRead, summary="Cancel a pending order")

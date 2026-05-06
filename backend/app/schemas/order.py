@@ -19,6 +19,10 @@ class OrderCreate(APIModel):
     limit_price: Decimal | None = Field(None, gt=0)
 
 
+class ManualFillRequest(APIModel):
+    fill_price: Decimal = Field(..., gt=0)
+
+
 class FillRead(APIModel):
     id: int
     order_id: int

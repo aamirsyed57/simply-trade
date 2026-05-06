@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { orderApi, type CreateOrderPayload } from '../api/index';
 import { X } from 'lucide-react';
 
@@ -17,33 +17,56 @@ export function ManualTradeModal({ portfolioId, symbolId, ticker, strategyCode, 
   const [orderType, setOrderType] = useState<'MKT' | 'LMT'>('MKT');
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
+  const [fillPrice, setFillPrice] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const mutation = useMutation({
-    mutationFn: (payload: CreateOrderPayload) => orderApi.create(payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] });
-      onClose();
-    },
-    onError: (e: Error) => setError(e.message),
-  });
-
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
     const parsedQty = parseFloat(qty);
     if (!parsedQty || parsedQty <= 0) { setError('Quantity must be greater than 0'); return; }
+
     const parsedLimit = orderType === 'LMT' ? parseFloat(limitPrice) : undefined;
     if (orderType === 'LMT' && (!parsedLimit || parsedLimit <= 0)) { setError('Limit price must be greater than 0'); return; }
-    mutation.mutate({
-      portfolio_id: portfolioId,
-      symbol_id: symbolId,
-      strategy_code: strategyCode,
-      side,
-      qty: parsedQty,
-      order_type: orderType,
-      ...(parsedLimit ? { limit_price: parsedLimit } : {}),
-    });
+
+    const parsedFill = parseFloat(fillPrice);
+    if (!parsedFill || parsedFill <= 0) { setError('Fill price must be greater than 0'); return; }
+
+    setSubmitting(true);
+    try {
+      const payload: CreateOrderPayload = {
+        portfolio_id: portfolioId,
+        symbol_id: symbolId,
+        strategy_code: strategyCode,
+        side,
+        qty: parsedQty,
+        order_type: orderType,
+        ...(parsedLimit ? { limit_price: parsedLimit } : {}),
+      };
+      const order = await orderApi.create(payload);
+      await orderApi.fill(order.id, parsedFill);
+      qc.invalidateQueries({ queryKey: ['orders'] });
+      qc.invalidateQueries({ queryKey: ['positions'] });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // When switching order type, sync fill price default to limit price
+  function handleOrderTypeChange(t: 'MKT' | 'LMT') {
+    setOrderType(t);
+    if (t === 'LMT' && limitPrice && !fillPrice) setFillPrice(limitPrice);
+  }
+
+  // Keep fill price in sync with limit price while user types it
+  function handleLimitChange(v: string) {
+    setLimitPrice(v);
+    if (orderType === 'LMT') setFillPrice(v);
   }
 
   return (
@@ -85,56 +108,60 @@ export function ManualTradeModal({ portfolioId, symbolId, ticker, strategyCode, 
           <div>
             <label style={labelStyle}>Quantity (shares)</label>
             <input
-              type="number"
-              min="0.01"
-              step="any"
-              value={qty}
-              onChange={e => setQty(e.target.value)}
-              placeholder="e.g. 10"
-              required
-              style={inputStyle}
+              type="number" min="0.01" step="any"
+              value={qty} onChange={e => setQty(e.target.value)}
+              placeholder="e.g. 10" required style={inputStyle}
             />
           </div>
 
           {/* Order type */}
           <div>
             <label style={labelStyle}>Order Type</label>
-            <select value={orderType} onChange={e => setOrderType(e.target.value as 'MKT' | 'LMT')} style={inputStyle}>
+            <select value={orderType} onChange={e => handleOrderTypeChange(e.target.value as 'MKT' | 'LMT')} style={inputStyle}>
               <option value="MKT">Market (MKT)</option>
               <option value="LMT">Limit (LMT)</option>
             </select>
           </div>
 
-          {/* Limit price */}
+          {/* Limit price — LMT only */}
           {orderType === 'LMT' && (
             <div>
               <label style={labelStyle}>Limit Price (USD)</label>
               <input
-                type="number"
-                min="0.01"
-                step="any"
-                value={limitPrice}
-                onChange={e => setLimitPrice(e.target.value)}
-                placeholder="e.g. 150.00"
-                required
-                style={inputStyle}
+                type="number" min="0.01" step="any"
+                value={limitPrice} onChange={e => handleLimitChange(e.target.value)}
+                placeholder="e.g. 150.00" required style={inputStyle}
               />
             </div>
           )}
+
+          {/* Fill price — always shown, captures actual execution price */}
+          <div>
+            <label style={labelStyle}>
+              Fill Price (USD)
+              <span style={{ fontWeight: 400, marginLeft: 6, color: 'var(--text-muted)' }}>— actual execution price</span>
+            </label>
+            <input
+              type="number" min="0.01" step="any"
+              value={fillPrice} onChange={e => setFillPrice(e.target.value)}
+              placeholder="e.g. 149.87" required style={inputStyle}
+            />
+          </div>
 
           {error && <p style={{ margin: 0, fontSize: 12, color: 'var(--danger)' }}>{error}</p>}
 
           <button
             type="submit"
-            disabled={mutation.isPending}
+            disabled={submitting}
             style={{
               marginTop: 4, padding: '10px 0', borderRadius: 8, border: 'none',
               background: side === 'BUY' ? '#16a34a' : '#dc2626',
-              color: '#fff', fontWeight: 700, fontSize: 14, cursor: mutation.isPending ? 'not-allowed' : 'pointer',
-              opacity: mutation.isPending ? 0.7 : 1,
+              color: '#fff', fontWeight: 700, fontSize: 14,
+              cursor: submitting ? 'not-allowed' : 'pointer',
+              opacity: submitting ? 0.7 : 1,
             }}
           >
-            {mutation.isPending ? 'Submitting…' : `Place ${side} Order`}
+            {submitting ? 'Recording…' : `Record ${side} Fill`}
           </button>
         </form>
       </div>
