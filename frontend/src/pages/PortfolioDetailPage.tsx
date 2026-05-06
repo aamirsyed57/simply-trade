@@ -6,7 +6,8 @@ import { assignmentApi, symbolApi, strategyApi, type Assignment } from '../api/i
 import { CashPanel } from '../components/CashPanel';
 import { ModeBadge } from '../components/ModeBadge';
 import { AssignStrategyModal } from '../components/AssignStrategyModal';
-import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Zap } from 'lucide-react';
+import { ManualTradeModal } from '../components/ManualTradeModal';
 
 export function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +31,7 @@ export function PortfolioDetailPage() {
 
   const [showAssign, setShowAssign] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [tradingAssignment, setTradingAssignment] = useState<Assignment | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: (assignmentId: number) => assignmentApi.delete(assignmentId),
@@ -38,7 +40,7 @@ export function PortfolioDetailPage() {
 
   const toggleMutation = useMutation({
     mutationFn: ({ aid, enabled }: { aid: number; enabled: boolean }) =>
-      assignmentApi.patch(portfolioId, aid, { enabled } as any),
+      assignmentApi.patch(aid, { enabled } as any),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['assignments', portfolioId] }),
   });
 
@@ -132,6 +134,7 @@ export function PortfolioDetailPage() {
                     </td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6 }}>
+                        <ActionBtn onClick={() => setTradingAssignment(a)} title="Manual trade"><Zap size={12} /></ActionBtn>
                         <ActionBtn onClick={() => setEditingAssignment(a)} title="Edit"><Pencil size={12} /></ActionBtn>
                         <ActionBtn danger onClick={() => { if (confirm('Remove assignment?')) deleteMutation.mutate(a.id); }} title="Remove"><Trash2 size={12} /></ActionBtn>
                       </div>
@@ -149,6 +152,16 @@ export function PortfolioDetailPage() {
           portfolioId={portfolioId}
           existing={editingAssignment ?? undefined}
           onClose={() => { setShowAssign(false); setEditingAssignment(null); }}
+        />
+      )}
+
+      {tradingAssignment && (
+        <ManualTradeModal
+          portfolioId={portfolioId}
+          symbolId={tradingAssignment.symbol_id}
+          ticker={symbolMap[tradingAssignment.symbol_id]?.ticker ?? String(tradingAssignment.symbol_id)}
+          strategyCode={tradingAssignment.strategy_code}
+          onClose={() => setTradingAssignment(null)}
         />
       )}
     </div>
