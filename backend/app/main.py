@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import assignments, ops, orders, portfolios, positions, strategies, symbols, historical
+from app.api import assignments, ops, orders, portfolios, positions, strategies, symbols, historical, account
 
 app = FastAPI(
     title="AutoTrader",
@@ -35,6 +35,7 @@ app.include_router(assignments.router, prefix="/api/v1")
 app.include_router(orders.router, prefix="/api/v1")
 app.include_router(positions.router, prefix="/api/v1")
 app.include_router(historical.router, prefix="/api/v1")
+app.include_router(account.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["ops"])
