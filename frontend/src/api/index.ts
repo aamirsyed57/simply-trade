@@ -141,3 +141,19 @@ export const orderApi = {
   get: (orderId: number) => request<Order>(`/orders/${orderId}`),
   cancel: (orderId: number) => request<Order>(`/orders/${orderId}/cancel`, { method: 'PATCH' }),
 };
+
+export interface Position {
+  id: number;
+  portfolio_id: number;
+  symbol_id: number;
+  qty: number;
+  avg_price: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  market_value: number;
+  last_updated: string;
+}
+
+export const positionApi = {
+  list: (portfolioId: number) => request<Position[]>(`/portfolios/${portfolioId}/positions`),
+};

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { portfolioApi } from '../api/portfolios';
-import { assignmentApi, symbolApi, strategyApi, type Assignment } from '../api/index';
+import { assignmentApi, symbolApi, strategyApi, orderApi, positionApi, type Assignment, type Order, type Position } from '../api/index';
 import { CashPanel } from '../components/CashPanel';
 import { ModeBadge } from '../components/ModeBadge';
 import { AssignStrategyModal } from '../components/AssignStrategyModal';
@@ -28,6 +28,16 @@ export function PortfolioDetailPage() {
 
   const { data: symbols = [] } = useQuery({ queryKey: ['symbols'], queryFn: symbolApi.list });
   const { data: strategies = [] } = useQuery({ queryKey: ['strategies'], queryFn: strategyApi.list });
+  const { data: positions = [] } = useQuery<Position[]>({
+    queryKey: ['positions', portfolioId],
+    queryFn: () => positionApi.list(portfolioId),
+    refetchInterval: 10_000,
+  });
+  const { data: orders = [] } = useQuery<Order[]>({
+    queryKey: ['orders', portfolioId],
+    queryFn: () => orderApi.list(portfolioId),
+    refetchInterval: 10_000,
+  });
 
   const [showAssign, setShowAssign] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
@@ -46,9 +56,19 @@ export function PortfolioDetailPage() {
 
   const symbolMap = Object.fromEntries(symbols.map(s => [s.id, s]));
   const stratMap = Object.fromEntries(strategies.map(s => [s.code, s]));
+  const positionMap = Object.fromEntries(positions.map(p => [p.symbol_id, p]));
+  const pendingBySymbol: Record<number, Order[]> = {};
+  for (const o of orders) {
+    if (o.status === 'PENDING' || o.status === 'SUBMITTED') {
+      (pendingBySymbol[o.symbol_id] ??= []).push(o);
+    }
+  }
 
   const fmt = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+  const fmtPx = (v: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+  const fmtPnl = (v: number) => `${v >= 0 ? '+' : ''}${fmtPx(v)}`;
 
   if (!portfolio) return <div style={{ padding: 32, color: 'var(--text-muted)' }}>Loading…</div>;
 
@@ -94,7 +114,7 @@ export function PortfolioDetailPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-                {['Symbol', 'Strategy', 'Allocation', 'Params', 'Status', 'Actions'].map(h => (
+                {['Symbol', 'Strategy', 'Allocation', 'Params', 'Position', 'Pending', 'Status', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
@@ -118,9 +138,40 @@ export function PortfolioDetailPage() {
                     </td>
                     <td style={td}><span style={{ fontWeight: 600 }}>{fmt(a.allocation)}</span></td>
                     <td style={td}>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {Object.entries(a.params ?? {}).map(([k, v]) => `${k}=${v}`).join(', ') || '—'}
                       </div>
+                    </td>
+                    <td style={td}>
+                      {(() => {
+                        const pos = positionMap[a.symbol_id];
+                        if (!pos || pos.qty === 0) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
+                        const pnlColor = pos.unrealized_pnl >= 0 ? '#22c55e' : '#ef4444';
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 12 }}>{pos.qty} sh @ {fmtPx(pos.avg_price)}</div>
+                            <div style={{ fontSize: 11, color: pnlColor }}>{fmtPnl(pos.unrealized_pnl)}</div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td style={td}>
+                      {(() => {
+                        const pending = pendingBySymbol[a.symbol_id] ?? [];
+                        if (!pending.length) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {pending.map(o => (
+                              <span key={o.id} style={{
+                                fontSize: 11, fontFamily: 'monospace', whiteSpace: 'nowrap',
+                                color: o.side === 'BUY' ? '#22c55e' : '#ef4444',
+                              }}>
+                                {o.side} {o.qty} {o.order_type}{o.limit_price ? ` @ ${fmtPx(o.limit_price)}` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={td}>
                       <button
