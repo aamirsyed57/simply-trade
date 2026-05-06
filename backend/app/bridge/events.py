@@ -33,6 +33,7 @@ class FillEvent(BaseModel):
 
 class OrderStatusEvent(BaseModel):
     order_ref: str
+    ibkr_order_id: int
     status: str
     filled: float
     remaining: float

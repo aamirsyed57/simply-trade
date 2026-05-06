@@ -84,6 +84,7 @@ class BridgeService:
     def _on_order_status(self, trade: Trade):
         event = OrderStatusEvent(
             order_ref=trade.order.orderRef,
+            ibkr_order_id=trade.order.orderId,
             status=trade.orderStatus.status,
             filled=float(trade.orderStatus.filled),
             remaining=float(trade.orderStatus.remaining),
@@ -121,7 +122,19 @@ class BridgeService:
         order.orderRef = f"pf:{req.portfolio_id}:{req.strategy_code}:{req.mode}"
 
         try:
-            self.ibkr.place_order(contract, order)
+            trade = self.ibkr.place_order(contract, order)
+            # Publish the IBKR-assigned order ID immediately so the worker can
+            # update Order.ibkr_order_id before the first status callback fires.
+            event = OrderStatusEvent(
+                order_ref=order.orderRef,
+                ibkr_order_id=trade.order.orderId,
+                status="Submitted",
+                filled=0.0,
+                remaining=req.total_quantity,
+                avg_fill_price=0.0,
+            )
+            await self.redis_pub.publish(CHANNEL_ORDER_STATUS, event.model_dump_json())
+            logger.info(f"Order placed: ibkr_order_id={trade.order.orderId} ref={order.orderRef}")
         except Exception as e:
             logger.error(f"Failed to place order: {e}")
 

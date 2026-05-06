@@ -172,6 +172,51 @@ class OrderManager:
         logger.info(f"Processed fill: order_ref={order_ref}, qty={qty}, price={price}")
         return fill
 
+    # IBKR status strings → our OrderStatus
+    _IBKR_STATUS_MAP: dict[str, OrderStatus] = {
+        "PreSubmitted": OrderStatus.SUBMITTED,
+        "Submitted": OrderStatus.SUBMITTED,
+        "Filled": OrderStatus.FILLED,
+        "Cancelled": OrderStatus.CANCELLED,
+        "Inactive": OrderStatus.CANCELLED,
+    }
+
+    async def handle_order_status(
+        self,
+        order_ref: str,
+        ibkr_order_id: int,
+        status: str,
+    ) -> Order | None:
+        """
+        Update Order.ibkr_order_id and status from an IBKR OrderStatus event.
+        Matches the most recent open order for the given order_ref that has no
+        ibkr_order_id yet (first call) or matches the known ibkr_order_id.
+        """
+        result = await self.db.execute(
+            select(Order)
+            .where(Order.order_ref == order_ref)
+            .where(Order.status.in_([OrderStatus.PENDING, OrderStatus.SUBMITTED, OrderStatus.PARTIALLY_FILLED]))
+            .where(
+                (Order.ibkr_order_id == ibkr_order_id) | (Order.ibkr_order_id == None)  # noqa: E711
+            )
+            .order_by(Order.created_at.desc())
+        )
+        order = result.scalars().first()
+        if not order:
+            logger.warning(f"handle_order_status: no open order for ref={order_ref} ibkr_id={ibkr_order_id}")
+            return None
+
+        if order.ibkr_order_id is None:
+            order.ibkr_order_id = ibkr_order_id
+
+        new_status = self._IBKR_STATUS_MAP.get(status)
+        if new_status:
+            order.status = new_status
+
+        await self.db.flush()
+        logger.info(f"Order status updated: ref={order_ref} ibkr_id={ibkr_order_id} status={status}")
+        return order
+
     async def handle_cancel(self, order_id: int) -> Order | None:
         """Release cash_reserved and mark order as cancelled."""
         order = await self.db.get(Order, order_id)
