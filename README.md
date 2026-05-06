@@ -285,8 +285,8 @@ simply-trade/
 | 1 | SQLAlchemy models, Alembic migrations, seed data | ✅ Complete |
 | 2 | Core CRUD REST API + Swagger | ✅ Complete |
 | 3 | IBKR bridge (`ib_insync`, `orderRef` tagging, Redis pub/sub) | ✅ Complete |
-| 3.5 | Historical data layer (`MarketDataService`, IBKR caching) | 🔲 Next |
-| 4 | Strategy framework + 6 fully-implemented strategies | 🔲 Planned |
+| 3.5 | Historical data layer (`MarketDataService`, IBKR caching) | ✅ Complete |
+| 4 | Strategy framework + 6 fully-implemented strategies | 🔲 Next |
 | 4.5 | `ExecutionContext` abstraction (live/paper/backtest routers) | 🔲 Planned |
 | 5 | Live execution engine (Celery Beat, OrderManager, fill handler) | 🔲 Planned |
 | 5.5 | Backtest engine (SimulatedRouter, fill models, metrics) | 🔲 Planned |
