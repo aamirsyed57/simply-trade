@@ -16,6 +16,7 @@ from app.models.symbol import Symbol
 from app.schemas.order import OrderCreate, OrderRead, ManualFillRequest
 from app.services.order_service import OrderManager
 from app.bridge.events import CHANNEL_ORDER_REQUESTS, OrderRequestEvent
+from app.utils.market_hours import is_market_hours
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -46,6 +47,9 @@ async def create_order(data: OrderCreate, db: AsyncSession = Depends(get_db)):
     symbol = await db.get(Symbol, data.symbol_id)
     if symbol is None:
         raise HTTPException(status_code=404, detail=f"Symbol {data.symbol_id} not found")
+
+    if not is_market_hours(symbol.exchange):
+        raise HTTPException(status_code=422, detail=f"Market is closed for {symbol.exchange} — orders can only be placed during regular trading hours")
 
     if data.order_type.value == "LMT" and data.limit_price is None:
         raise HTTPException(status_code=422, detail="limit_price is required for LMT orders")
@@ -111,6 +115,9 @@ async def retry_order(order_id: int, db: AsyncSession = Depends(get_db)):
     symbol = await db.get(Symbol, order.symbol_id)
     if symbol is None:
         raise HTTPException(status_code=404, detail="Symbol not found")
+
+    if not is_market_hours(symbol.exchange):
+        raise HTTPException(status_code=422, detail=f"Market is closed for {symbol.exchange} — cannot submit to IBKR outside regular trading hours")
 
     event = OrderRequestEvent(
         portfolio_id=order.portfolio_id,

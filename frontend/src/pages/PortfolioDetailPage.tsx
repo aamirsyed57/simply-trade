@@ -9,6 +9,7 @@ import { AssignStrategyModal } from '../components/AssignStrategyModal';
 import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Zap, AlertTriangle } from 'lucide-react';
 import { ManualTradeModal } from '../components/ManualTradeModal';
 import { RetryFillModal } from '../components/RetryFillModal';
+import { isMarketHours } from '../utils/marketHours';
 
 export function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -189,9 +190,10 @@ export function PortfolioDetailPage() {
                                 </span>
                                 {o.ibkr_order_id === null && (
                                   <button
-                                    onClick={() => setRetryOrder(o)}
-                                    title="No IBKR order ID — click to record fill"
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                                    onClick={() => isMarketHours(sym?.exchange) && setRetryOrder(o)}
+                                    title={isMarketHours(sym?.exchange) ? 'No IBKR order ID — click to retry via bridge' : 'Market closed — retry unavailable'}
+                                    disabled={!isMarketHours(sym?.exchange)}
+                                    style={{ background: 'none', border: 'none', cursor: isMarketHours(sym?.exchange) ? 'pointer' : 'not-allowed', padding: 0, display: 'flex', alignItems: 'center', opacity: isMarketHours(sym?.exchange) ? 1 : 0.4 }}
                                   >
                                     <AlertTriangle size={13} color="#f59e0b" />
                                   </button>
@@ -214,7 +216,7 @@ export function PortfolioDetailPage() {
                     </td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <ActionBtn onClick={() => setTradingAssignment(a)} title="Manual trade"><Zap size={12} /></ActionBtn>
+                        <ActionBtn onClick={() => setTradingAssignment(a)} title={isMarketHours(sym?.exchange) ? 'Manual trade' : 'Market closed'} disabled={!isMarketHours(sym?.exchange)}><Zap size={12} /></ActionBtn>
                         <ActionBtn onClick={() => setEditingAssignment(a)} title="Edit"><Pencil size={12} /></ActionBtn>
                         <ActionBtn danger onClick={() => { if (confirm('Remove assignment?')) deleteMutation.mutate(a.id); }} title="Remove"><Trash2 size={12} /></ActionBtn>
                       </div>
@@ -258,14 +260,17 @@ export function PortfolioDetailPage() {
 
 const td: React.CSSProperties = { padding: '12px 16px', fontSize: 13, verticalAlign: 'middle' };
 
-function ActionBtn({ children, onClick, title, danger }: { children: React.ReactNode; onClick: () => void; title: string; danger?: boolean }) {
+function ActionBtn({ children, onClick, title, danger, disabled }: { children: React.ReactNode; onClick: () => void; title: string; danger?: boolean; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}
       title={title}
+      disabled={disabled}
       style={{
         background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 5,
-        padding: '4px 7px', cursor: 'pointer', color: danger ? 'var(--danger)' : 'var(--text-muted)', display: 'flex', alignItems: 'center',
+        padding: '4px 7px', cursor: disabled ? 'not-allowed' : 'pointer',
+        color: disabled ? 'var(--text-muted)' : danger ? 'var(--danger)' : 'var(--text-muted)',
+        opacity: disabled ? 0.4 : 1, display: 'flex', alignItems: 'center',
       }}
     >
       {children}

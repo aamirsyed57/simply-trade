@@ -2,8 +2,6 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
@@ -17,23 +15,9 @@ from app.strategies.clocks import WallClock
 from app.strategies.context import ExecutionContext
 from app.strategies.data_sources import LiveDataSource
 from app.strategies.routers import IBKRBridgeRouter
+from app.utils.market_hours import is_market_hours
 
 logger = logging.getLogger(__name__)
-
-ET = ZoneInfo("America/New_York")
-MARKET_OPEN_HOUR = 9
-MARKET_OPEN_MINUTE = 30
-MARKET_CLOSE_HOUR = 16
-
-
-def is_market_hours() -> bool:
-    """Return True if current time is within US market hours (9:30–16:00 ET, weekdays)."""
-    now_et = datetime.now(ET)
-    if now_et.weekday() >= 5:  # Saturday=5, Sunday=6
-        return False
-    market_open = now_et.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0)
-    market_close = now_et.replace(hour=MARKET_CLOSE_HOUR, minute=0, second=0, microsecond=0)
-    return market_open <= now_et < market_close
 
 
 async def _run_tick(assignment_id: int):
@@ -120,37 +104,35 @@ async def _run_tick(assignment_id: int):
 
 
 @celery_app.task(name="app.workers.strategy_runner.run_strategy_tick")
-def run_strategy_tick(assignment_id: int):
-    """
-    Entry point for Celery. Runs one strategy tick for a given assignment.
-    Market hours are checked here to avoid running during non-trading periods.
-    """
-    if not is_market_hours():
-        logger.debug(f"Outside market hours, skipping assignment {assignment_id}")
+def run_strategy_tick(assignment_id: int, exchange: str = "NYSE"):
+    """Entry point for Celery. Exchange-aware market hours check before running the tick."""
+    if not is_market_hours(exchange):
+        logger.debug(f"Outside market hours for {exchange}, skipping assignment {assignment_id}")
         return
-
     asyncio.run(_run_tick(assignment_id))
 
 
 @celery_app.task(name="app.workers.strategy_runner.dispatch_all_assignments")
 def dispatch_all_assignments():
     """
-    Beat task: query all enabled assignments and fan out individual ticks.
-    This avoids hardcoding assignment IDs in the Beat schedule.
+    Beat task: query all enabled assignments with their symbol exchange, then fan out
+    only those whose exchange is currently open.
     """
-    if not is_market_hours():
-        return
-
-    async def _fetch_ids():
+    async def _fetch():
         async with async_sessionmaker() as session:
             result = await session.execute(
-                select(PortfolioSymbolStrategy.id).where(PortfolioSymbolStrategy.enabled == True)
+                select(PortfolioSymbolStrategy.id, Symbol.exchange)
+                .join(Symbol, Symbol.id == PortfolioSymbolStrategy.symbol_id)
+                .where(PortfolioSymbolStrategy.enabled == True)
             )
-            return [row[0] for row in result.all()]
+            return result.all()
 
-    assignment_ids = asyncio.run(_fetch_ids())
-    for aid in assignment_ids:
-        run_strategy_tick.delay(aid)
+    rows = asyncio.run(_fetch())
+    dispatched = 0
+    for aid, exchange in rows:
+        if is_market_hours(exchange):
+            run_strategy_tick.delay(aid, exchange)
+            dispatched += 1
 
-    logger.info(f"Dispatched {len(assignment_ids)} strategy ticks")
+    logger.info(f"Dispatched {dispatched}/{len(rows)} strategy ticks")
 
