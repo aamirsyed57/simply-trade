@@ -6,8 +6,9 @@ import { assignmentApi, symbolApi, strategyApi, orderApi, positionApi, type Assi
 import { CashPanel } from '../components/CashPanel';
 import { ModeBadge } from '../components/ModeBadge';
 import { AssignStrategyModal } from '../components/AssignStrategyModal';
-import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Zap } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Zap, AlertTriangle } from 'lucide-react';
 import { ManualTradeModal } from '../components/ManualTradeModal';
+import { RetryFillModal } from '../components/RetryFillModal';
 
 export function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +43,7 @@ export function PortfolioDetailPage() {
   const [showAssign, setShowAssign] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [tradingAssignment, setTradingAssignment] = useState<Assignment | null>(null);
+  const [retryOrder, setRetryOrder] = useState<Order | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: (assignmentId: number) => assignmentApi.delete(assignmentId),
@@ -176,14 +178,25 @@ export function PortfolioDetailPage() {
                         const pending = pendingBySymbol[a.symbol_id] ?? [];
                         if (!pending.length) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
                         return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {pending.map(o => (
-                              <span key={o.id} style={{
-                                fontSize: 11, fontFamily: 'monospace', whiteSpace: 'nowrap',
-                                color: o.side === 'BUY' ? '#22c55e' : '#ef4444',
-                              }}>
-                                {o.side} {o.qty} {o.order_type}{o.limit_price ? ` @ ${fmtPx(o.limit_price)}` : ''}
-                              </span>
+                              <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <span style={{
+                                  fontSize: 11, fontFamily: 'monospace', whiteSpace: 'nowrap',
+                                  color: o.side === 'BUY' ? '#22c55e' : '#ef4444',
+                                }}>
+                                  {o.side} {o.qty} {o.order_type}{o.limit_price ? ` @ ${fmtPx(o.limit_price)}` : ''}
+                                </span>
+                                {o.ibkr_order_id === null && (
+                                  <button
+                                    onClick={() => setRetryOrder(o)}
+                                    title="No IBKR order ID — click to record fill"
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                                  >
+                                    <AlertTriangle size={13} color="#f59e0b" />
+                                  </button>
+                                )}
+                              </div>
                             ))}
                           </div>
                         );
@@ -229,6 +242,14 @@ export function PortfolioDetailPage() {
           ticker={symbolMap[tradingAssignment.symbol_id]?.ticker ?? String(tradingAssignment.symbol_id)}
           strategyCode={tradingAssignment.strategy_code}
           onClose={() => setTradingAssignment(null)}
+        />
+      )}
+
+      {retryOrder && (
+        <RetryFillModal
+          order={retryOrder}
+          ticker={symbolMap[retryOrder.symbol_id]?.ticker ?? String(retryOrder.symbol_id)}
+          onClose={() => setRetryOrder(null)}
         />
       )}
     </div>
