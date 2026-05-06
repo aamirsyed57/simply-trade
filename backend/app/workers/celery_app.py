@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.workers.data_fetcher",
         "app.workers.strategy_runner",
         "app.workers.fill_handler",
+        "app.workers.backtest_runner",
     ],
 )
 
