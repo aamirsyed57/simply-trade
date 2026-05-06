@@ -2,7 +2,7 @@
 
 **Self-hosted IBKR-backed trading platform — multiple virtual portfolios, paper/live/backtest modes.**
 
-> ⚠️ **Status: Under active development.** Phases 0 and 1 (scaffolding + database schema) are complete. The API, execution engine, and frontend are still being built. See [Build Progress](#build-progress) below.
+> ⚠️ **Status: Under active development.** Phases 0, 1, 2, and 3 (database schema, REST API, IBKR bridge) are complete. The execution engine and frontend are still being built. See [Build Progress](#build-progress) below.
 
 ---
 
@@ -283,9 +283,9 @@ simply-trade/
 |---|---|---|
 | 0 | Repo scaffolding, Docker Compose, tooling | ✅ Complete |
 | 1 | SQLAlchemy models, Alembic migrations, seed data | ✅ Complete |
-| 2 | Core CRUD REST API + Swagger | 🔲 Next |
-| 3 | IBKR bridge (`ib_insync`, `orderRef` tagging, Redis pub/sub) | 🔲 Planned |
-| 3.5 | Historical data layer (`MarketDataService`, IBKR caching) | 🔲 Planned |
+| 2 | Core CRUD REST API + Swagger | ✅ Complete |
+| 3 | IBKR bridge (`ib_insync`, `orderRef` tagging, Redis pub/sub) | ✅ Complete |
+| 3.5 | Historical data layer (`MarketDataService`, IBKR caching) | 🔲 Next |
 | 4 | Strategy framework + 6 fully-implemented strategies | 🔲 Planned |
 | 4.5 | `ExecutionContext` abstraction (live/paper/backtest routers) | 🔲 Planned |
 | 5 | Live execution engine (Celery Beat, OrderManager, fill handler) | 🔲 Planned |
