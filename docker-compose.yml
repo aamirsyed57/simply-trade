@@ -131,11 +131,12 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:5173"
+    environment:
+      - API_HOST=api
     volumes:
       - ./frontend:/app
       - /app/node_modules
     command: npm run dev -- --host 0.0.0.0
-    # Will fail until frontend is scaffolded — that's expected.
     profiles:
       - frontend
 
