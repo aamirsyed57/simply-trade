@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { accountApi, orderApi } from '../api/index';
 
+
 function fmt(v: number | null, opts?: Intl.NumberFormatOptions) {
   if (v === null || v === undefined) return '—';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0, ...opts }).format(v);
@@ -34,6 +35,12 @@ export function AccountSummaryBar() {
     refetchInterval: 15_000,
   });
 
+  const { data: summary } = useQuery({
+    queryKey: ['account', 'summary'],
+    queryFn: accountApi.summary,
+    refetchInterval: 15_000,
+  });
+
   const pendingCount = orders.filter(o => o.status === 'pending' || o.status === 'submitted').length;
 
   if (isError || !data) return null;
@@ -60,6 +67,12 @@ export function AccountSummaryBar() {
         value={String(pendingCount)}
         color={pendingCount > 0 ? '#f59e0b' : 'var(--text-muted)'}
       />
+      <Tile
+        label="Reserved (Pending)"
+        value={fmt(summary?.total_cash_reserved ?? null)}
+        color={summary && summary.total_cash_reserved > 0 ? '#f59e0b' : undefined}
+      />
+      <Tile label="Deployed (Positions)" value={fmt(summary?.total_cash_deployed ?? null)} />
       <Tile label="NAV" value={fmt(data.net_liquidation)} />
       <Tile label="Cash" value={fmt(data.total_cash)} />
       <Tile label="Buying Power" value={fmt(data.buying_power)} />
