@@ -2,19 +2,19 @@
 
 **Self-hosted IBKR-backed trading platform — multiple virtual portfolios, paper/live/backtest modes.**
 
-> ⚠️ **Status: Under active development.** Phases 0, 1, 2, and 3 (database schema, REST API, IBKR bridge) are complete. The execution engine and frontend are still being built. See [Build Progress](#build-progress) below.
-
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
+- [First-Time Setup](#first-time-setup)
+- [Running the Full Stack](#running-the-full-stack)
+- [Frontend Development](#frontend-development)
 - [Environment Variables](#environment-variables)
-- [Running the Stack](#running-the-stack)
 - [Database](#database)
 - [Running Tests](#running-tests)
+- [Common Commands](#common-commands)
 - [Project Structure](#project-structure)
 - [Build Progress](#build-progress)
 - [Design Documentation](#design-documentation)
@@ -29,7 +29,7 @@ AutoTrader lets you run **multiple virtual portfolios** on a single IBKR account
 - Watchlist of symbols
 - Per-symbol strategy assignments with custom parameters
 
-Supported execution modes (once fully built):
+Supported execution modes:
 
 | Mode | Description |
 |---|---|
@@ -45,129 +45,180 @@ Six built-in strategies: Gap and Go, Bull Flag Breakout, VWAP Reclaim, Sentiment
 
 | Tool | Version | Notes |
 |---|---|---|
-| Docker Desktop | ≥ 4.x | Required for all services |
+| Docker Desktop | ≥ 4.x | Required — all services run inside Docker |
 | Docker Compose | ≥ 2.x | Bundled with Docker Desktop |
-| Node.js | ≥ 22.x | Only needed for local frontend dev outside Docker |
-| Python | ≥ 3.12 | Only needed for local backend dev outside Docker |
+| Node.js | ≥ 22.x | Only for local frontend dev (`npm run dev`) outside Docker |
+| Git | any | For cloning |
 
-> Everything runs inside Docker — you don't need Python or Node installed locally to get started.
+> You do **not** need Python installed locally — everything runs inside Docker.
 
 ---
 
-## Quick Start
+## First-Time Setup
+
+Run these commands **once** after cloning the repo:
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/youruser/simply-trade.git
+# 1. Clone
+git clone https://github.com/aamirsyed57/simply-trade.git
 cd simply-trade
 
-# 2. Copy environment template
+# 2. Create your .env file (defaults work for local dev)
 cp .env.example .env
-# Edit .env if you need to change any defaults (see Environment Variables below)
 
-# 3. Start core services (API + Postgres + Redis)
-docker compose up -d postgres redis api
+# 3. Build & start core services
+docker compose up -d --build postgres redis api
 
-# 4. Run database migrations
+# 4. Wait for the API to be healthy (~15 s), then run migrations
 docker compose exec api alembic upgrade head
 
-# 5. Seed demo data (6 strategies, 5 symbols, 1 paper portfolio)
+# 5. Seed demo data (strategies, symbols, demo portfolio)
 docker compose exec api python -m app.seed
 
-# 6. Verify the API is running
+# 6. Verify everything is up
 curl http://localhost:8000/health
-# → {"status": "ok"}
-
-# 7. Open Swagger UI
-open http://localhost:8000/docs
+# → {"status":"ok"}
 ```
+
+Open **[http://localhost:8000/docs](http://localhost:8000/docs)** to explore the Swagger UI.
 
 ---
 
-## Environment Variables
+## Running the Full Stack
 
-Copy `.env.example` to `.env` and fill in the values you need:
-
-```env
-# Database (internal Docker networking — no changes needed for local dev)
-DATABASE_URL=postgresql+asyncpg://autotrader:autotrader@postgres:5432/autotrader
-POSTGRES_USER=autotrader
-POSTGRES_PASSWORD=autotrader
-POSTGRES_DB=autotrader
-
-# Redis
-REDIS_URL=redis://redis:6379/0
-
-# IBKR connectivity (Phase 3 — not needed yet)
-LIVE_TRADING_ENABLED=false        # Keep false until Phase 9
-TWS_PAPER_HOST=tws-gateway-paper
-TWS_PAPER_PORT=7497
-TWS_LIVE_HOST=tws-gateway-live
-TWS_LIVE_PORT=7496
-
-# Telegram notifications (Phase 7.5 — leave blank for now)
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-```
-
-> **`LIVE_TRADING_ENABLED`** — This must remain `false` until you have intentionally configured a live IBKR account, completed paper trading validation, and are ready for Phase 9. Setting it to `true` allows real money orders.
-
----
-
-## Running the Stack
-
-### Core services only (current — Phases 0–1)
+### Minimum — API only (no workers, no frontend)
 
 ```bash
 docker compose up -d postgres redis api
 ```
 
-| Service | URL | Notes |
-|---|---|---|
-| API + Swagger | http://localhost:8000/docs | FastAPI auto-generated docs |
-| ReDoc | http://localhost:8000/redoc | Alternative API docs |
-| Health check | http://localhost:8000/health | Returns `{"status": "ok"}` |
-| PostgreSQL | localhost:5433 | Exposed on 5433 (5432 may be used by local Postgres) |
-| Redis | localhost:6379 | |
+| URL | Service |
+|---|---|
+| http://localhost:8000/docs | Swagger / API explorer |
+| http://localhost:8000/health | Health check |
+| http://localhost:8000/redoc | ReDoc API docs |
+| localhost:5433 | PostgreSQL (user: autotrader, db: autotrader) |
+| localhost:6379 | Redis |
 
-### With Celery workers (Phase 5+)
+---
+
+### With Celery workers (strategy execution + backtests)
+
+Celery Worker handles `run_strategy_tick` and `run_backtest` tasks.
+Celery Beat dispatches strategy ticks every 60 s during market hours.
 
 ```bash
 docker compose --profile worker up -d
 ```
 
-### With IBKR bridge (Phase 3+)
+This starts the `worker` and `beat` containers in addition to the core services.
+
+Check worker logs:
+```bash
+docker compose logs -f worker
+docker compose logs -f beat
+```
+
+---
+
+### With IBKR Bridge (live/paper order routing)
+
+The bridge holds the long-lived `ib_insync` connection to TWS/IB Gateway and routes orders via Redis.
 
 ```bash
 docker compose --profile bridge up -d
 ```
 
-### With frontend (Phase 6+)
+> **Note:** You need IB Gateway or TWS running on your host (or in a separate container) and configured in `.env`.
+
+---
+
+### Full stack — API + Workers + Frontend
 
 ```bash
+# Start backend services and workers
+docker compose --profile worker up -d
+
+# Start the frontend dev server (in Docker)
 docker compose --profile frontend up -d
-# Frontend: http://localhost:5173
 ```
 
-### View logs
+| URL | Service |
+|---|---|
+| http://localhost:5173 | React frontend (Vite dev server) |
+| http://localhost:8000/docs | Backend API docs |
+
+---
+
+### Recommended dev workflow (frontend outside Docker)
+
+Running the frontend locally is faster (instant HMR, no Docker rebuild):
 
 ```bash
-# All services
-docker compose logs -f
+# Terminal 1 — backend
+docker compose --profile worker up -d
 
-# Single service
-docker compose logs -f api
-docker compose logs -f postgres
+# Terminal 2 — frontend (local, proxies /api → localhost:8000)
+cd frontend
+npm install        # first time only
+npm run dev
 ```
 
-### Stop everything
+Open **[http://localhost:5173](http://localhost:5173)**.
+
+---
+
+## Frontend Development
+
+The frontend is a **Vite + React + TypeScript** app with Tailwind CSS v4.
 
 ```bash
-docker compose down
+cd frontend
 
-# Stop and wipe volumes (⚠️ destroys database data)
-docker compose down -v
+# Install dependencies (first time)
+npm install
+
+# Start dev server (proxies /api to localhost:8000)
+npm run dev
+
+# Type-check + production build
+npm run build
+
+# Lint
+npm run lint
 ```
+
+The Vite proxy is configured in `vite.config.ts` — all `/api` requests go to `http://localhost:8000`.
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env`. Defaults work for local development:
+
+```env
+# ── Database ──────────────────────────────────────────────────────────────────
+DATABASE_URL=postgresql+asyncpg://autotrader:autotrader@postgres:5432/autotrader
+POSTGRES_USER=autotrader
+POSTGRES_PASSWORD=autotrader
+POSTGRES_DB=autotrader
+
+# ── Redis ─────────────────────────────────────────────────────────────────────
+REDIS_URL=redis://redis:6379/0
+
+# ── IBKR Bridge ───────────────────────────────────────────────────────────────
+LIVE_TRADING_ENABLED=false      # ⚠️  Keep false — real orders only when Phase 9 is ready
+TWS_PAPER_HOST=tws-gateway-paper
+TWS_PAPER_PORT=7497
+TWS_LIVE_HOST=tws-gateway-live
+TWS_LIVE_PORT=7496
+
+# ── Notifications (Phase 7.5) ──────────────────────────────────────────────────
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+```
+
+> ⚠️ **`LIVE_TRADING_ENABLED=false`** is enforced. Setting it to `true` enables real money orders. Do not change this until Phase 9.
 
 ---
 
@@ -175,44 +226,42 @@ docker compose down -v
 
 ### Migrations
 
-Migrations are managed with **Alembic**. All commands run inside the `api` container:
+All Alembic commands run inside the `api` container:
 
 ```bash
 # Apply all pending migrations
 docker compose exec api alembic upgrade head
 
-# Check current migration status
+# Check current state
 docker compose exec api alembic current
 
 # Generate a new migration after changing models
-docker compose exec api alembic revision --autogenerate -m "describe your change"
+docker compose exec api alembic revision --autogenerate -m "add my column"
 
-# Rollback one migration
+# Rollback one step
 docker compose exec api alembic downgrade -1
 ```
 
 ### Seed data
 
-The seed script is idempotent — safe to run multiple times:
+The seed script is **idempotent** — safe to run multiple times. It upserts from the Python strategy registry, so it always stays in sync with the code:
 
 ```bash
 docker compose exec api python -m app.seed
 ```
 
-It creates:
-- **6 strategies** registered with full JSON parameter schemas
+Creates:
+- **6 strategies** from the Python registry with full JSON parameter schemas
 - **5 demo symbols**: AAPL, MSFT, TSLA, GOOGL, AMZN
 - **1 demo portfolio**: "Demo Paper Portfolio" ($100,000 budget, paper mode)
 
-### Connect directly with psql
+### Direct psql access
 
 ```bash
+# Inside Docker
 docker compose exec postgres psql -U autotrader -d autotrader
-```
 
-Or from your host (port 5433):
-
-```bash
+# From your host (port 5433)
 psql -h localhost -p 5433 -U autotrader -d autotrader
 ```
 
@@ -221,14 +270,71 @@ psql -h localhost -p 5433 -U autotrader -d autotrader
 ## Running Tests
 
 ```bash
-# Run all tests
-docker compose exec api python -m pytest -v
+# Run full test suite
+docker compose exec api pytest -v
 
-# Run a specific test file
-docker compose exec api python -m pytest tests/test_models.py -v
+# Run a specific file
+docker compose exec api pytest tests/test_api.py -v
 
 # With coverage
-docker compose exec api python -m pytest --cov=app tests/
+docker compose exec api pytest --cov=app tests/
+
+# Filter by name
+docker compose exec api pytest -k "strategies" -v
+```
+
+---
+
+## Common Commands
+
+```bash
+# ── Docker ────────────────────────────────────────────────────────────────────
+
+# Restart just the API (picks up code changes without full rebuild)
+docker compose restart api
+
+# View logs (follow)
+docker compose logs -f api
+docker compose logs -f worker
+docker compose logs -f beat
+
+# Stop all containers (keeps volumes)
+docker compose down
+
+# Stop + wipe database ⚠️ destructive
+docker compose down -v
+
+# Rebuild a single service image
+docker compose build api
+
+
+# ── Strategy registry ────────────────────────────────────────────────────────
+# Strategies are auto-discovered from backend/app/strategies/
+# To add a new strategy:
+#   1. Create backend/app/strategies/my_strategy.py
+#   2. Import it in backend/app/strategies/__init__.py
+#   3. Re-seed: docker compose exec api python -m app.seed
+# The API will immediately reflect it — no DB changes needed.
+
+
+# ── Backtests ─────────────────────────────────────────────────────────────────
+# First prefetch historical data:
+curl -X POST http://localhost:8000/api/v1/historical/prefetch \
+  -H "Content-Type: application/json" \
+  -d '{"symbol_id": 1, "timeframe": "1m", "start": "2024-01-01T00:00:00Z", "end": "2024-03-31T00:00:00Z"}'
+
+# Then create a backtest:
+curl -X POST http://localhost:8000/api/v1/backtests \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "AAPL Gap and Go Q1 2024",
+    "strategy_code": "gap_and_go",
+    "symbol_ids": [1],
+    "timeframe": "1m",
+    "start_date": "2024-01-01",
+    "end_date": "2024-03-31",
+    "initial_capital": 100000
+  }'
 ```
 
 ---
@@ -239,40 +345,75 @@ docker compose exec api python -m pytest --cov=app tests/
 simply-trade/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app + router registration
-│   │   ├── config.py            # Pydantic Settings (env vars)
-│   │   ├── database.py          # Async SQLAlchemy engine + session
-│   │   ├── seed.py              # Demo data seeder
-│   │   ├── models/              # SQLAlchemy 2.0 async models
-│   │   │   ├── portfolio.py     # Portfolio + cash accounting
-│   │   │   ├── symbol.py        # Tradeable instruments
-│   │   │   ├── strategy.py      # Strategy registry
-│   │   │   ├── assignment.py    # PortfolioSymbolStrategy linking table
-│   │   │   ├── order.py         # Orders (MKT/LMT only in v1)
-│   │   │   ├── fill.py          # Execution reports from IBKR
-│   │   │   ├── position.py      # VirtualPosition per (portfolio, symbol)
-│   │   │   ├── signal.py        # Strategy signal audit log
-│   │   │   ├── backtest.py      # Backtest jobs + results
-│   │   │   └── historical_bar.py # Cached OHLCV bars
-│   │   ├── api/                 # FastAPI routers (Phase 2+)
-│   │   ├── schemas/             # Pydantic request/response models (Phase 2+)
-│   │   ├── services/            # Business logic (Phase 2+)
-│   │   ├── strategies/          # Strategy framework + 6 strategies (Phase 4+)
-│   │   ├── bridge/              # IBKR bridge service (Phase 3+)
-│   │   ├── workers/             # Celery tasks (Phase 5+)
-│   │   └── backtest/            # Backtest engine (Phase 5.5+)
-│   ├── migrations/              # Alembic migrations
-│   ├── tests/                   # pytest test suite
+│   │   ├── main.py                # FastAPI app factory + router registration
+│   │   ├── config.py              # Pydantic Settings (reads from .env)
+│   │   ├── database.py            # Async SQLAlchemy engine + session
+│   │   ├── seed.py                # Demo data seeder (registry-driven)
+│   │   ├── models/                # SQLAlchemy 2.0 async models
+│   │   │   ├── portfolio.py       # Portfolio + cash accounting
+│   │   │   ├── symbol.py          # Tradeable instruments
+│   │   │   ├── strategy.py        # Strategy metadata (synced from registry)
+│   │   │   ├── assignment.py      # PortfolioSymbolStrategy
+│   │   │   ├── order.py           # Orders (MKT/LMT only in v1)
+│   │   │   ├── fill.py            # Execution reports from IBKR
+│   │   │   ├── position.py        # VirtualPosition per (portfolio, symbol)
+│   │   │   ├── backtest.py        # Backtest jobs + results
+│   │   │   └── historical_bar.py  # Cached OHLCV bars
+│   │   ├── api/                   # FastAPI routers
+│   │   │   ├── portfolios.py      # CRUD + cash validation
+│   │   │   ├── symbols.py
+│   │   │   ├── strategies.py      # Registry-driven (no DB queries)
+│   │   │   ├── assignments.py
+│   │   │   ├── orders.py
+│   │   │   ├── positions.py
+│   │   │   ├── account.py         # Aggregate stats across all portfolios
+│   │   │   ├── historical.py      # Coverage + prefetch
+│   │   │   ├── backtests.py       # Create, query, results
+│   │   │   └── ops.py             # Health, IBKR status, kill-switch
+│   │   ├── schemas/               # Pydantic request/response models
+│   │   ├── services/
+│   │   │   ├── order_service.py   # OrderManager — pre-trade checks + fill handling
+│   │   │   └── market_data_service.py  # IBKR historical data with caching
+│   │   ├── strategies/            # Strategy framework
+│   │   │   ├── base.py            # BaseStrategy + STRATEGY_REGISTRY decorator
+│   │   │   ├── context.py         # ExecutionContext (clock + data + router)
+│   │   │   ├── clocks.py          # WallClock / SimulatedClock
+│   │   │   ├── data_sources.py    # LiveDataSource / ReplayDataSource
+│   │   │   ├── routers.py         # IBKRBridgeRouter / SimulatedRouter
+│   │   │   ├── signals.py         # Signal dataclass
+│   │   │   ├── gap_and_go.py
+│   │   │   ├── bull_flag.py
+│   │   │   ├── vwap_reclaim.py
+│   │   │   ├── sentiment_momentum.py
+│   │   │   ├── mean_reversion.py
+│   │   │   └── opening_range.py
+│   │   ├── bridge/                # IBKR bridge (Phase 3)
+│   │   │   ├── bridge.py          # Main bridge process
+│   │   │   ├── connection.py      # ib_insync wrapper
+│   │   │   └── events.py          # Redis pub/sub event schemas
+│   │   ├── workers/               # Celery tasks
+│   │   │   ├── celery_app.py      # App config + Beat schedule
+│   │   │   ├── strategy_runner.py # run_strategy_tick + dispatch_all_assignments
+│   │   │   ├── fill_handler.py    # Redis fill event consumer
+│   │   │   ├── backtest_runner.py # run_backtest task
+│   │   │   └── data_fetcher.py    # Historical data prefetch task
+│   │   └── backtest/              # Backtest engine
+│   │       ├── engine.py          # BacktestEngine — bar replay loop
+│   │       └── metrics.py         # Sharpe, Sortino, Calmar, drawdown, etc.
+│   ├── migrations/                # Alembic migrations
+│   ├── tests/                     # pytest integration tests
 │   ├── Dockerfile
 │   ├── pyproject.toml
 │   └── requirements.txt
-├── frontend/                    # Vite + React + TypeScript (Phase 6+)
-├── docs/
-│   ├── autotrader_platform_design.md   # Full system design doc
-│   └── implementation_plan.md          # Phased build plan
+├── frontend/                      # Vite + React + TypeScript + Tailwind CSS v4
+│   └── src/
+│       ├── api/                   # Typed fetch helpers
+│       ├── components/            # AppShell, ModeBadge, CashPanel, modals
+│       └── pages/                 # PortfoliosPage, PortfolioDetailPage, StrategiesPage
+├── docs/                          # Design docs, phase plans, walkthroughs
 ├── docker-compose.yml
 ├── .env.example
-└── CLAUDE.md                    # AI assistant context
+└── CLAUDE.md                      # AI assistant context
 ```
 
 ---
@@ -300,12 +441,23 @@ simply-trade/
 
 ## Design Documentation
 
-- **[System Design](docs/autotrader_platform_design.md)** — Full architecture, domain model, API surface, strategy framework, execution modes, risk controls, and operational notes.
-- **[Implementation Plan](docs/implementation_plan.md)** — Phased build plan with file-level deliverables, dependencies, and verification steps for each phase.
+All docs live in the [`docs/`](docs/) folder:
+
+| File | Contents |
+|---|---|
+| [`implementation_plan.md`](docs/implementation_plan.md) | Full phased build plan with file-level deliverables |
+| [`phase_5_live_execution_plan.md`](docs/phase_5_live_execution_plan.md) | OrderManager, Beat, fill handler design |
+| [`phase_5_5_backtest_engine_plan.md`](docs/phase_5_5_backtest_engine_plan.md) | Backtest engine design |
+| [`phase_6_frontend_config_plan.md`](docs/phase_6_frontend_config_plan.md) | Frontend architecture |
+| [`walkthrough_phase_5_live_execution.md`](docs/walkthrough_phase_5_live_execution.md) | Phase 5 implementation summary |
+| [`walkthrough_phase_5_5_backtest_engine.md`](docs/walkthrough_phase_5_5_backtest_engine.md) | Phase 5.5 implementation summary |
+| [`walkthrough_phase_6_frontend_config.md`](docs/walkthrough_phase_6_frontend_config.md) | Phase 6 implementation summary |
+| [`antigravity_rules.md`](docs/antigravity_rules.md) | AI assistant documentation rules |
 
 ### Key design decisions
 
-- **Virtual portfolios on a single IBKR account** — Every order is tagged `orderRef = "pf:{portfolio_id}:{strategy_code}:{mode}"`. This is non-negotiable; the bridge refuses orders without it.
-- **Cash accounting** — `cash_available = budget_total - cash_reserved - cash_deployed`. Enforced at both the application layer and the database (check constraints).
-- **`ExecutionContext`** — The core abstraction allowing the same strategy code to run in live, paper, and backtest modes without modification.
-- **v1 scope** — USD-only, MKT/LMT orders only, IBKR-only historical data, Telegram for notifications. Other options are deferred.
+- **Virtual portfolios on a single IBKR account** — Every order is tagged `orderRef = "pf:{portfolio_id}:{strategy_code}:{mode}"`. The bridge refuses orders without it.
+- **Cash accounting** — `cash_available = budget_total - cash_reserved - cash_deployed`. Enforced at both application and database layers (check constraints).
+- **Registry-driven strategies** — Adding a new strategy requires only a new file in `backend/app/strategies/`; the API and seed script auto-discover it.
+- **`ExecutionContext`** — The core abstraction allowing identical strategy code to run in live, paper, and backtest modes.
+- **v1 scope** — USD only, MKT/LMT orders only, IBKR-only historical data. Other options are deferred.
