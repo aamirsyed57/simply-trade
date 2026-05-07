@@ -67,7 +67,15 @@ class BridgeService:
             note="Connected to paper gateway" if connected else "Disconnected from paper gateway",
         )
         asyncio.create_task(self.redis_pub.publish(CHANNEL_CONNECTION_STATUS, event.model_dump_json()))
-        asyncio.create_task(self.redis_pub.set("bridge:connection_status", event.model_dump_json()))
+        if connected:
+            # Short TTL: expires 30 s after last write. Heartbeat keeps it alive
+            # while running; if the bridge crashes, the key expires and the API
+            # correctly returns disconnected.
+            asyncio.create_task(self.redis_pub.set("bridge:connection_status", event.model_dump_json(), ex=30))
+        else:
+            # No TTL on disconnect so the disconnected state persists until the
+            # bridge reconnects and the heartbeat starts refreshing again.
+            asyncio.create_task(self.redis_pub.set("bridge:connection_status", event.model_dump_json()))
 
     def _on_fill(self, trade: Trade, fill: Fill):
         order_ref = trade.order.orderRef
@@ -210,10 +218,28 @@ class BridgeService:
         except Exception as e:
             logger.error(f"Failed to request initial data: {e}")
 
+    async def _heartbeat(self):
+        """Refresh bridge:connection_status every 15 s while connected.
+
+        Keeps the 30 s TTL alive. If the bridge process dies without sending
+        a disconnect event, the key expires naturally and the API returns
+        disconnected within one TTL window.
+        """
+        while True:
+            await asyncio.sleep(15)
+            if self.ibkr.connected:
+                event = ConnectionStatusEvent(
+                    connected=True,
+                    gateway_mode="paper",
+                    note="Connected to paper gateway",
+                )
+                await self.redis_pub.set("bridge:connection_status", event.model_dump_json(), ex=30)
+
     async def start(self):
         logger.info("Starting IBKR Bridge...")
         asyncio.create_task(self.ibkr.connect_with_retry())
         asyncio.create_task(self._check_initial_connection())
+        asyncio.create_task(self._heartbeat())
         await self._redis_listener()
 
 
