@@ -1,5 +1,30 @@
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { accountApi, orderApi } from '../api/index';
+
+const APP_TZ = 'Europe/Berlin';
+
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const datePart = now.toLocaleDateString('en-GB', { timeZone: APP_TZ, weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+  const timePart = now.toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const tzAbbr = new Intl.DateTimeFormat('en', { timeZone: APP_TZ, timeZoneName: 'short' })
+    .formatToParts(now).find(p => p.type === 'timeZoneName')?.value ?? APP_TZ;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 20px', borderRight: '1px solid var(--border)' }}>
+      <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{tzAbbr}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+        {datePart} · {timePart}
+      </span>
+    </div>
+  );
+}
 
 
 function fmt(v: number | null, opts?: Intl.NumberFormatOptions) {
@@ -62,6 +87,7 @@ export function AccountSummaryBar() {
       flexShrink: 0,
       gap: 0,
     }}>
+      <Clock />
       <Tile
         label="Pending Orders"
         value={String(pendingCount)}
