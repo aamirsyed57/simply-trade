@@ -9,7 +9,7 @@ import { AssignStrategyModal } from '../components/AssignStrategyModal';
 import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Zap, AlertTriangle } from 'lucide-react';
 import { ManualTradeModal } from '../components/ManualTradeModal';
 import { RetryFillModal } from '../components/RetryFillModal';
-import { isMarketHours } from '../utils/marketHours';
+import { isTradingSession } from '../utils/marketHours';
 
 export function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -190,10 +190,10 @@ export function PortfolioDetailPage() {
                                 </span>
                                 {o.ibkr_order_id === null && (
                                   <button
-                                    onClick={() => isMarketHours(sym?.exchange) && setRetryOrder(o)}
-                                    title={isMarketHours(sym?.exchange) ? 'No IBKR order ID — click to retry via bridge' : 'Market closed — retry unavailable'}
-                                    disabled={!isMarketHours(sym?.exchange)}
-                                    style={{ background: 'none', border: 'none', cursor: isMarketHours(sym?.exchange) ? 'pointer' : 'not-allowed', padding: 0, display: 'flex', alignItems: 'center', opacity: isMarketHours(sym?.exchange) ? 1 : 0.4 }}
+                                    onClick={() => isTradingSession(sym?.exchange) && setRetryOrder(o)}
+                                    title={isTradingSession(sym?.exchange) ? 'No IBKR order ID — click to retry via bridge' : 'Market closed — retry unavailable'}
+                                    disabled={!isTradingSession(sym?.exchange)}
+                                    style={{ background: 'none', border: 'none', cursor: isTradingSession(sym?.exchange) ? 'pointer' : 'not-allowed', padding: 0, display: 'flex', alignItems: 'center', opacity: isTradingSession(sym?.exchange) ? 1 : 0.4 }}
                                   >
                                     <AlertTriangle size={13} color="#f59e0b" />
                                   </button>
@@ -216,7 +216,7 @@ export function PortfolioDetailPage() {
                     </td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <ActionBtn onClick={() => setTradingAssignment(a)} title={isMarketHours(sym?.exchange) ? 'Manual trade' : 'Market closed'} disabled={!isMarketHours(sym?.exchange)}><Zap size={12} /></ActionBtn>
+                        <ActionBtn onClick={() => setTradingAssignment(a)} title={isTradingSession(sym?.exchange) ? 'Manual trade' : 'Market closed'} disabled={!isTradingSession(sym?.exchange)}><Zap size={12} /></ActionBtn>
                         <ActionBtn onClick={() => setEditingAssignment(a)} title="Edit"><Pencil size={12} /></ActionBtn>
                         <ActionBtn danger onClick={() => { if (confirm('Remove assignment?')) deleteMutation.mutate(a.id); }} title="Remove"><Trash2 size={12} /></ActionBtn>
                       </div>

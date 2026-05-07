@@ -117,12 +117,17 @@ export function getMarketStatus(exchange: string): MarketStatus {
   return { session: 'closed', isOpen: false, countdown: label };
 }
 
+/** True only during the regular session — used by automated strategy guards. */
 export function isMarketHours(exchange = 'NYSE'): boolean {
-  // Only regular session counts for automated trading guards.
   const spec = EXCHANGE_HOURS[exchange.toUpperCase()] ?? DEFAULT;
   const now = _localNow(spec.timezone);
   const day = now.getDay();
   if (day === 0 || day === 6) return false;
   const mins = now.getHours() * 60 + now.getMinutes();
   return mins >= spec.openHour * 60 + spec.openMin && mins < spec.closeHour * 60 + spec.closeMin;
+}
+
+/** True during pre-market, regular, or after-hours — used by manual trade guards. */
+export function isTradingSession(exchange = 'NYSE'): boolean {
+  return getMarketStatus(exchange).session !== 'closed';
 }

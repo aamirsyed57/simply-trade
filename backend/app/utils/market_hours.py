@@ -64,3 +64,40 @@ def is_market_hours(exchange: str = "NYSE") -> bool:
         return False
     t = now_local.time().replace(second=0, microsecond=0)
     return spec.open <= t < spec.close
+
+
+# Extended pre-market / after-hours windows — US exchanges only for now.
+# Used by the manual trade guard so traders can submit during extended sessions.
+_EXTENDED: dict[str, tuple[time, time]] = {
+    "NYSE":   (time(4, 0), time(20, 0)),
+    "NASDAQ": (time(4, 0), time(20, 0)),
+    "ARCA":   (time(4, 0), time(20, 0)),
+    "AMEX":   (time(4, 0), time(20, 0)),
+    "BATS":   (time(4, 0), time(20, 0)),
+    "IEX":    (time(4, 0), time(20, 0)),
+    "SMART":  (time(4, 0), time(20, 0)),
+    "CBOE":   (time(4, 0), time(20, 0)),
+    "TSX":    (time(7, 0), time(17, 0)),
+    "TSXV":   (time(7, 0), time(17, 0)),
+    "LSE":    (time(7, 0), time(17, 15)),
+    "IOB":    (time(7, 0), time(17, 15)),
+    "XETRA":  (time(8, 0), time(20, 0)),
+    "FWB":    (time(8, 0), time(20, 0)),
+    "SBF":    (time(7, 15), time(17, 30)),
+    "AEB":    (time(7, 15), time(17, 30)),
+}
+
+
+def is_trading_session(exchange: str = "NYSE") -> bool:
+    """Return True during pre-market, regular, or after-hours — used by manual trade guards."""
+    exch = exchange.upper()
+    spec = _MAP.get(exch, _DEFAULT)
+    now_local = datetime.now(ZoneInfo(spec.timezone))
+    if now_local.weekday() >= 5:
+        return False
+    t = now_local.time().replace(second=0, microsecond=0)
+    # Use extended window if defined, otherwise fall back to regular hours
+    ext = _EXTENDED.get(exch)
+    if ext:
+        return ext[0] <= t < ext[1]
+    return spec.open <= t < spec.close
