@@ -18,7 +18,6 @@ class IBKRConnection:
         self.on_fill: Callable[[Trade, ib_insync.Fill], None] | None = None
         self.on_status: Callable[[Trade], None] | None = None
         self.on_open_order: Callable[[Trade], None] | None = None
-        self.on_completed_order: Callable[[Trade], None] | None = None
         self.on_connection_change: Callable[[bool], None] | None = None
         self.on_account_value: Callable[[AccountValue], None] | None = None
 
@@ -27,7 +26,6 @@ class IBKRConnection:
         self.ib.execDetailsEvent += self._on_exec_details
         self.ib.orderStatusEvent += self._on_order_status
         self.ib.openOrderEvent += self._on_open_order
-        self.ib.completedOrderEvent += self._on_completed_order_event
         self.ib.accountValueEvent += self._on_account_value
 
     async def connect_with_retry(self):
@@ -66,10 +64,6 @@ class IBKRConnection:
     def _on_open_order(self, trade: Trade):
         if self.on_open_order:
             self.on_open_order(trade)
-
-    def _on_completed_order_event(self, trade: Trade):
-        if self.on_completed_order:
-            self.on_completed_order(trade)
 
     def _on_account_value(self, value: AccountValue):
         if self.on_account_value:

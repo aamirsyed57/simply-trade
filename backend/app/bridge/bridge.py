@@ -43,7 +43,6 @@ class BridgeService:
         self.ibkr.on_fill = self._on_fill
         self.ibkr.on_status = self._on_order_status
         self.ibkr.on_open_order = self._on_open_order
-        self.ibkr.on_completed_order = self._on_completed_order
         self.ibkr.on_connection_change = self._on_connection_change
         self.ibkr.on_account_value = self._on_account_value
 
@@ -223,7 +222,10 @@ class BridgeService:
             if cmd.action == "req_open_orders":
                 logger.info("Sync command — requesting open + completed orders from IBKR")
                 self.ibkr.ib.reqOpenOrders()
-                self.ibkr.ib.reqCompletedOrders(apiOnly=False)
+                # reqCompletedOrders returns Trade objects directly (no event in ib_insync 0.9.x)
+                completed = self.ibkr.ib.reqCompletedOrders(apiOnly=False)
+                for trade in completed:
+                    self._on_completed_order(trade)
         except Exception as e:
             logger.error(f"Invalid SyncCommandEvent: {e}")
 
