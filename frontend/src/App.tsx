@@ -8,6 +8,7 @@ import { BacktestsPage } from './pages/BacktestsPage';
 import { HistoricalDataPage } from './pages/HistoricalDataPage';
 import { WorkerLogsPage } from './pages/WorkerLogsPage';
 import { IBKROrdersPage } from './pages/IBKROrdersPage';
+import { ExchangeHoursPage } from './pages/ExchangeHoursPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/historical" element={<HistoricalDataPage />} />
             <Route path="/logs" element={<WorkerLogsPage />} />
             <Route path="/ibkr-orders" element={<IBKROrdersPage />} />
+            <Route path="/exchange-hours" element={<ExchangeHoursPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>
