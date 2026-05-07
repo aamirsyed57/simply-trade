@@ -39,5 +39,10 @@ celery_app.conf.beat_schedule = {
         # many timezones; the task checks is_market_hours(exchange) per assignment.
         "schedule": crontab(minute="*/1", day_of_week="mon-fri"),
     },
+    "reconcile-ibkr-ids": {
+        "task": "app.workers.fill_handler.reconcile_ibkr_ids",
+        # Every 30 seconds — catches ibkr_order_id updates missed by pub/sub on startup.
+        "schedule": 30.0,
+    },
 }
 
