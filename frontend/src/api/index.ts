@@ -189,6 +189,9 @@ export interface IBKROrderEntry {
   remaining: number;
   avg_fill_price: number;
   is_platform_order: boolean;
+  is_live: boolean;
+  first_seen_at: string;
+  last_updated_at: string;
 }
 
 export interface IBKRDBOrphan {

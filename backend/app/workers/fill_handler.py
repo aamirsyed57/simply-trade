@@ -3,15 +3,17 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import redis.asyncio as aioredis
 from celery.signals import worker_ready
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.workers.celery_app import celery_app
 from app.config import settings
-from app.database import async_sessionmaker
+from app.database import AsyncSessionLocal
+from app.models.ibkr_order import IBKROrder
 from app.models.order import Order, OrderStatus
 from app.services.order_service import OrderManager
 
@@ -21,12 +23,51 @@ CHANNEL_FILLS = "orders:fills"
 CHANNEL_ORDER_STATUS = "orders:status"
 
 
+async def _upsert_ibkr_order(session, entry: dict) -> None:
+    """Insert or update a row in ibkr_orders from a bridge hash entry."""
+    ibkr_id = int(entry["ibkr_order_id"])
+    is_platform = bool(entry.get("order_ref", "").startswith("pf:"))
+    stmt = (
+        pg_insert(IBKROrder)
+        .values(
+            ibkr_order_id=ibkr_id,
+            order_ref=entry.get("order_ref", ""),
+            ticker=entry.get("ticker", ""),
+            exchange=entry.get("exchange", ""),
+            action=entry.get("action", ""),
+            order_type=entry.get("order_type", ""),
+            total_quantity=float(entry.get("total_quantity", 0)),
+            limit_price=entry.get("limit_price"),
+            status=entry.get("status", ""),
+            filled=float(entry.get("filled", 0)),
+            remaining=float(entry.get("remaining", 0)),
+            avg_fill_price=float(entry.get("avg_fill_price", 0)),
+            is_platform_order=is_platform,
+            first_seen_at=datetime.now(timezone.utc),
+            last_updated_at=datetime.now(timezone.utc),
+        )
+        .on_conflict_do_update(
+            index_elements=["ibkr_order_id"],
+            set_={
+                "order_ref": entry.get("order_ref", ""),
+                "status": entry.get("status", ""),
+                "filled": float(entry.get("filled", 0)),
+                "remaining": float(entry.get("remaining", 0)),
+                "avg_fill_price": float(entry.get("avg_fill_price", 0)),
+                "is_platform_order": is_platform,
+                "last_updated_at": datetime.now(timezone.utc),
+            },
+        )
+    )
+    await session.execute(stmt)
+
+
 async def _handle_fill(data: dict) -> None:
     order_ref = data["order_ref"]
     qty = float(data["qty"])
     price = float(data["price"])
 
-    async with async_sessionmaker() as session:
+    async with AsyncSessionLocal() as session:
         async with session.begin():
             om = OrderManager(session)
             fill = await om.handle_fill(
@@ -46,7 +87,7 @@ async def _handle_order_status(data: dict) -> None:
     ibkr_order_id = int(data["ibkr_order_id"])
     status = data["status"]
 
-    async with async_sessionmaker() as session:
+    async with AsyncSessionLocal() as session:
         async with session.begin():
             om = OrderManager(session)
             await om.handle_order_status(
@@ -54,6 +95,22 @@ async def _handle_order_status(data: dict) -> None:
                 ibkr_order_id=ibkr_order_id,
                 status=status,
             )
+
+            # Persist into ibkr_orders table (upsert)
+            await _upsert_ibkr_order(session, {
+                "ibkr_order_id": ibkr_order_id,
+                "order_ref": order_ref,
+                "ticker": data.get("ticker", ""),
+                "exchange": data.get("exchange", ""),
+                "action": data.get("action", ""),
+                "order_type": data.get("order_type", ""),
+                "total_quantity": data.get("total_quantity", 0),
+                "limit_price": data.get("limit_price"),
+                "status": status,
+                "filled": data.get("filled", 0),
+                "remaining": data.get("remaining", 0),
+                "avg_fill_price": data.get("avg_fill_price", 0),
+            })
 
 
 async def _listen_for_fills():
@@ -85,8 +142,8 @@ async def _listen_for_fills():
 
 async def _reconcile_ibkr_ids() -> None:
     """
-    Read bridge:ibkr_orders Redis hash and backfill ibkr_order_id for any
-    pending/submitted DB orders that missed the initial OrderStatusEvent.
+    Read bridge:ibkr_orders Redis hash, backfill ibkr_order_id for platform DB orders
+    that missed the initial OrderStatusEvent, and upsert all entries into ibkr_orders table.
     """
     r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
@@ -97,43 +154,45 @@ async def _reconcile_ibkr_ids() -> None:
     if not raw:
         return
 
-    # Build a map: order_ref → ibkr_order_id from the hash
+    entries: list[dict] = []
     ref_to_ibkr: dict[str, int] = {}
     for ibkr_id_str, entry_json in raw.items():
         try:
             entry = json.loads(entry_json)
+            entries.append(entry)
             ref = entry.get("order_ref", "")
             if ref.startswith("pf:"):
                 ref_to_ibkr[ref] = int(ibkr_id_str)
         except Exception:
             pass
 
-    if not ref_to_ibkr:
-        return
-
-    async with async_sessionmaker() as session:
+    async with AsyncSessionLocal() as session:
         async with session.begin():
-            result = await session.execute(
-                select(Order)
-                .where(Order.ibkr_order_id.is_(None))
-                .where(Order.status.in_([OrderStatus.PENDING, OrderStatus.SUBMITTED]))
-            )
-            orders = result.scalars().all()
+            # Upsert every live order from Redis into the DB table
+            for entry in entries:
+                await _upsert_ibkr_order(session, entry)
 
-            updated = 0
-            for order in orders:
-                ibkr_id = ref_to_ibkr.get(order.order_ref)
-                if ibkr_id is not None:
-                    order.ibkr_order_id = ibkr_id
-                    updated += 1
-
-            if updated:
-                logger.info(f"Reconciliation: backfilled ibkr_order_id for {updated} order(s)")
+            # Backfill ibkr_order_id on platform DB orders that missed the status event
+            if ref_to_ibkr:
+                result = await session.execute(
+                    select(Order)
+                    .where(Order.ibkr_order_id.is_(None))
+                    .where(Order.status.in_([OrderStatus.PENDING, OrderStatus.SUBMITTED]))
+                )
+                orders = result.scalars().all()
+                updated = 0
+                for order in orders:
+                    ibkr_id = ref_to_ibkr.get(order.order_ref)
+                    if ibkr_id is not None:
+                        order.ibkr_order_id = ibkr_id
+                        updated += 1
+                if updated:
+                    logger.info(f"Reconciliation: backfilled ibkr_order_id for {updated} order(s)")
 
 
 @celery_app.task(name="app.workers.fill_handler.reconcile_ibkr_ids")
 def reconcile_ibkr_ids():
-    """Periodic task: backfill ibkr_order_id for orders that missed the status event."""
+    """Periodic task: sync bridge:ibkr_orders hash → DB and backfill ibkr_order_id."""
     asyncio.run(_reconcile_ibkr_ids())
 
 

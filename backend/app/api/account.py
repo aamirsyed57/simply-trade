@@ -9,6 +9,7 @@ import redis.asyncio as aioredis
 
 from app.config import settings
 from app.database import get_db
+from app.models.ibkr_order import IBKROrder
 from app.models.portfolio import Portfolio
 from app.models.position import VirtualPosition
 from app.models.order import Order, OrderStatus
@@ -121,6 +122,9 @@ class IBKROrderEntry(BaseModel):
     remaining: float
     avg_fill_price: float
     is_platform_order: bool
+    is_live: bool          # True if the order is still open in the bridge right now
+    first_seen_at: str
+    last_updated_at: str
 
 
 class IBKRDBOrphan(BaseModel):
@@ -141,41 +145,51 @@ class IBKROrdersResponse(BaseModel):
     db_orphans: list[IBKRDBOrphan]
 
 
-@router.get("/ibkr-orders", response_model=IBKROrdersResponse, summary="Live IBKR open orders + DB orphans")
+@router.get("/ibkr-orders", response_model=IBKROrdersResponse, summary="Persisted IBKR orders + DB orphans")
 async def get_ibkr_orders(db: AsyncSession = Depends(get_db)):
+    # Read the live Redis hash to know which orders are still open in IBKR right now
     r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
         raw_hash = await r.hgetall("bridge:ibkr_orders")
     finally:
         await r.aclose()
 
-    parsed: list[dict] = []
-    for raw_val in raw_hash.values():
+    live_ids: set[int] = set()
+    for ibkr_id_str in raw_hash:
         try:
-            parsed.append(json.loads(raw_val))
-        except Exception:
-            continue
+            live_ids.add(int(ibkr_id_str))
+        except ValueError:
+            pass
 
-    ibkr_ids = [int(entry["ibkr_order_id"]) for entry in parsed]
-
-    known_ids: set[int] = set()
-    if ibkr_ids:
-        result = await db.execute(
-            select(Order.ibkr_order_id).where(Order.ibkr_order_id.in_(ibkr_ids))
-        )
-        known_ids = {row[0] for row in result.all()}
+    # Return all persisted IBKR orders from the DB, newest first
+    result = await db.execute(
+        select(IBKROrder).order_by(IBKROrder.first_seen_at.desc())
+    )
+    rows = result.scalars().all()
 
     ibkr_orders = [
         IBKROrderEntry(
-            **entry,
-            is_platform_order=(
-                int(entry["ibkr_order_id"]) in known_ids
-                and entry.get("order_ref", "").startswith("pf:")
-            ),
+            ibkr_order_id=row.ibkr_order_id,
+            order_ref=row.order_ref,
+            ticker=row.ticker,
+            exchange=row.exchange,
+            action=row.action,
+            order_type=row.order_type,
+            total_quantity=float(row.total_quantity),
+            limit_price=float(row.limit_price) if row.limit_price is not None else None,
+            status=row.status,
+            filled=float(row.filled),
+            remaining=float(row.remaining),
+            avg_fill_price=float(row.avg_fill_price),
+            is_platform_order=row.is_platform_order,
+            is_live=row.ibkr_order_id in live_ids,
+            first_seen_at=row.first_seen_at.isoformat(),
+            last_updated_at=row.last_updated_at.isoformat(),
         )
-        for entry in parsed
+        for row in rows
     ]
 
+    # Platform orders still pending/submitted but with no IBKR ID at all
     orphan_result = await db.execute(
         select(Order).where(
             Order.status.in_([OrderStatus.PENDING, OrderStatus.SUBMITTED]),
