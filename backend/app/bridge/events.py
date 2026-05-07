@@ -9,6 +9,7 @@ CHANNEL_FILLS = "orders:fills"
 CHANNEL_ORDER_STATUS = "orders:status"
 CHANNEL_CONNECTION_STATUS = "bridge:connection"
 CHANNEL_EMERGENCY = "bridge:emergency"
+CHANNEL_COMMANDS = "bridge:commands"
 
 class OrderRequestEvent(BaseModel):
     portfolio_id: int
@@ -46,3 +47,6 @@ class ConnectionStatusEvent(BaseModel):
 
 class EmergencyEvent(BaseModel):
     action: str  # cancel_all
+
+class SyncCommandEvent(BaseModel):
+    action: str  # req_open_orders

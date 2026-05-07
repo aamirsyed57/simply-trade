@@ -16,11 +16,13 @@ from app.bridge.events import (
     CHANNEL_ORDER_STATUS,
     CHANNEL_CONNECTION_STATUS,
     CHANNEL_EMERGENCY,
+    CHANNEL_COMMANDS,
     OrderRequestEvent,
     FillEvent,
     OrderStatusEvent,
     ConnectionStatusEvent,
     EmergencyEvent,
+    SyncCommandEvent,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -194,10 +196,19 @@ class BridgeService:
         except Exception as e:
             logger.error(f"Invalid EmergencyEvent: {e}")
 
+    async def _handle_command(self, event_data: str):
+        try:
+            cmd = SyncCommandEvent.model_validate_json(event_data)
+            if cmd.action == "req_open_orders":
+                logger.info("Received req_open_orders command — requesting open orders from IBKR")
+                self.ibkr.ib.reqOpenOrders()
+        except Exception as e:
+            logger.error(f"Invalid SyncCommandEvent: {e}")
+
     async def _redis_listener(self):
-        await self.pubsub.subscribe(CHANNEL_ORDER_REQUESTS, CHANNEL_EMERGENCY)
-        logger.info(f"Subscribed to Redis channels: {CHANNEL_ORDER_REQUESTS}, {CHANNEL_EMERGENCY}")
-        
+        await self.pubsub.subscribe(CHANNEL_ORDER_REQUESTS, CHANNEL_EMERGENCY, CHANNEL_COMMANDS)
+        logger.info(f"Subscribed to Redis channels: {CHANNEL_ORDER_REQUESTS}, {CHANNEL_EMERGENCY}, {CHANNEL_COMMANDS}")
+
         async for message in self.pubsub.listen():
             if message["type"] == "message":
                 channel = message["channel"]
@@ -206,6 +217,8 @@ class BridgeService:
                     await self._handle_order_request(data)
                 elif channel == CHANNEL_EMERGENCY:
                     await self._handle_emergency(data)
+                elif channel == CHANNEL_COMMANDS:
+                    await self._handle_command(data)
 
     async def _check_initial_connection(self):
         while not self.ibkr.connected:

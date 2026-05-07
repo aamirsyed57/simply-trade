@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { ibkrOrdersApi, symbolApi, type IBKROrderEntry, type IBKRDBOrphan } from '../api/index';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { ibkrOrdersApi, opsApi, symbolApi, type IBKROrderEntry, type IBKRDBOrphan } from '../api/index';
+import { RefreshCw } from 'lucide-react';
 
 const REFRESH_MS = 10_000;
 
@@ -48,11 +49,17 @@ function StatusChip({ status }: { status: string }) {
 
 export function IBKROrdersPage() {
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const qc = useQueryClient();
 
   const { data, isLoading, isError, dataUpdatedAt } = useQuery({
     queryKey: ['ibkr-orders'],
     queryFn: ibkrOrdersApi.list,
     refetchInterval: REFRESH_MS,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: opsApi.syncIbkrOrders,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ibkr-orders'] }),
   });
 
   const { data: symbols = [] } = useQuery({ queryKey: ['symbols'], queryFn: symbolApi.list });
@@ -106,6 +113,20 @@ export function IBKROrdersPage() {
               {orphanCount} orphan{orphanCount !== 1 ? 's' : ''}
             </div>
           )}
+          <button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            title={syncMutation.isSuccess ? syncMutation.data?.message : 'Force-fetch all open IBKR orders and persist to DB'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              borderRadius: 7, color: syncMutation.isPending ? 'var(--text-muted)' : 'var(--text-primary)',
+              fontSize: 12, fontWeight: 600, cursor: syncMutation.isPending ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <RefreshCw size={13} style={{ animation: syncMutation.isPending ? 'spin 1s linear infinite' : 'none' }} />
+            {syncMutation.isPending ? 'Syncing…' : syncMutation.isSuccess ? `Synced ${syncMutation.data?.upserted}` : 'Sync from IBKR'}
+          </button>
         </div>
       </div>
 
