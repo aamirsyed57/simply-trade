@@ -39,6 +39,13 @@ class OrderStatusEvent(BaseModel):
     filled: float
     remaining: float
     avg_fill_price: float
+    # Optional — populated when we have the full Trade object (open_order, completed_order)
+    ticker: str = ""
+    exchange: str = ""
+    action: str = ""
+    order_type: str = ""
+    total_quantity: float = 0.0
+    limit_price: float | None = None
 
 class ConnectionStatusEvent(BaseModel):
     connected: bool

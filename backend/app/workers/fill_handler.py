@@ -96,7 +96,9 @@ async def _handle_order_status(data: dict) -> None:
                 status=status,
             )
 
-            # Persist into ibkr_orders table (upsert)
+            # Persist into ibkr_orders table (upsert).
+            # ticker/exchange/action etc. are populated when the event came from
+            # _on_completed_order or _on_open_order (full Trade context available).
             await _upsert_ibkr_order(session, {
                 "ibkr_order_id": ibkr_order_id,
                 "order_ref": order_ref,
@@ -104,12 +106,12 @@ async def _handle_order_status(data: dict) -> None:
                 "exchange": data.get("exchange", ""),
                 "action": data.get("action", ""),
                 "order_type": data.get("order_type", ""),
-                "total_quantity": data.get("total_quantity", 0),
+                "total_quantity": float(data.get("total_quantity") or 0),
                 "limit_price": data.get("limit_price"),
                 "status": status,
-                "filled": data.get("filled", 0),
-                "remaining": data.get("remaining", 0),
-                "avg_fill_price": data.get("avg_fill_price", 0),
+                "filled": float(data.get("filled") or 0),
+                "remaining": float(data.get("remaining") or 0),
+                "avg_fill_price": float(data.get("avg_fill_price") or 0),
             })
 
 

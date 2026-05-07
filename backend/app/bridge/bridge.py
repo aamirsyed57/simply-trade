@@ -43,6 +43,7 @@ class BridgeService:
         self.ibkr.on_fill = self._on_fill
         self.ibkr.on_status = self._on_order_status
         self.ibkr.on_open_order = self._on_open_order
+        self.ibkr.on_completed_order = self._on_completed_order
         self.ibkr.on_connection_change = self._on_connection_change
         self.ibkr.on_account_value = self._on_account_value
 
@@ -130,6 +131,26 @@ class BridgeService:
             )
             asyncio.create_task(self.redis_pub.publish(CHANNEL_ORDER_STATUS, event.model_dump_json()))
 
+    def _on_completed_order(self, trade: Trade) -> None:
+        """Fires for each completed (filled/cancelled) order from reqCompletedOrders()."""
+        lmt = trade.order.lmtPrice
+        event = OrderStatusEvent(
+            order_ref=trade.order.orderRef or "",
+            ibkr_order_id=trade.order.orderId,
+            status=trade.orderStatus.status,
+            filled=float(trade.orderStatus.filled),
+            remaining=float(trade.orderStatus.remaining),
+            avg_fill_price=float(trade.orderStatus.avgFillPrice),
+            ticker=trade.contract.symbol,
+            exchange=trade.contract.exchange,
+            action=trade.order.action,
+            order_type=trade.order.orderType,
+            total_quantity=float(trade.order.totalQuantity),
+            limit_price=float(lmt) if lmt else None,
+        )
+        asyncio.create_task(self.redis_pub.publish(CHANNEL_ORDER_STATUS, event.model_dump_json()))
+        logger.info(f"Completed order: ibkr_id={trade.order.orderId} {trade.contract.symbol} status={trade.orderStatus.status}")
+
     def _on_order_status(self, trade: Trade) -> None:
         event = OrderStatusEvent(
             order_ref=trade.order.orderRef,
@@ -200,8 +221,9 @@ class BridgeService:
         try:
             cmd = SyncCommandEvent.model_validate_json(event_data)
             if cmd.action == "req_open_orders":
-                logger.info("Received req_open_orders command — requesting open orders from IBKR")
+                logger.info("Sync command — requesting open + completed orders from IBKR")
                 self.ibkr.ib.reqOpenOrders()
+                self.ibkr.ib.reqCompletedOrders(apiOnly=False)
         except Exception as e:
             logger.error(f"Invalid SyncCommandEvent: {e}")
 
