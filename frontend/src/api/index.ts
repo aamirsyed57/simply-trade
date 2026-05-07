@@ -40,7 +40,7 @@ export const opsApi = {
   ibkrStatus: () => rawRequest<{ connected: boolean; paper_gateway: string; live_gateway: string; note: string }>('/ops/ibkr/status'),
   killSwitch: () => rawRequest<{ live_trading_enabled: boolean; message: string }>('/ops/kill-switch', { method: 'POST' }),
   workerLogs: () => rawRequest<{ logs: string[] }>('/ops/logs/worker?lines=100'),
-  syncIbkrOrders: () => rawRequest<{ upserted: number; triggered_bridge_refresh: boolean; message: string }>('/ops/ibkr/sync-orders', { method: 'POST' }),
+  syncIbkrOrders: () => rawRequest<{ bridge_upserted: number; platform_upserted: number; triggered_bridge_refresh: boolean; message: string }>('/ops/ibkr/sync-orders', { method: 'POST' }),
 };
 
 export const symbolApi = {

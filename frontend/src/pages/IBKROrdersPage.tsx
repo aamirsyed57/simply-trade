@@ -125,7 +125,11 @@ export function IBKROrdersPage() {
             }}
           >
             <RefreshCw size={13} style={{ animation: syncMutation.isPending ? 'spin 1s linear infinite' : 'none' }} />
-            {syncMutation.isPending ? 'Syncing…' : syncMutation.isSuccess ? `Synced ${syncMutation.data?.upserted}` : 'Sync from IBKR'}
+            {syncMutation.isPending
+              ? 'Syncing…'
+              : syncMutation.isSuccess
+                ? `Synced ${(syncMutation.data?.bridge_upserted ?? 0) + (syncMutation.data?.platform_upserted ?? 0)}`
+                : 'Sync from IBKR'}
           </button>
         </div>
       </div>

@@ -8,13 +8,17 @@ from datetime import datetime, timezone
 import redis.asyncio as redis
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bridge.events import CHANNEL_COMMANDS, CHANNEL_EMERGENCY, EmergencyEvent, SyncCommandEvent
 from app.config import settings
 from app.database import get_db
+from app.models.fill import Fill
 from app.models.ibkr_order import IBKROrder
+from app.models.order import Order, OrderStatus
+from app.models.symbol import Symbol
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -90,8 +94,63 @@ async def kill_switch():
     }
 
 
+# Internal OrderStatus → IBKR status string for ibkr_orders rows built from the platform DB
+_STATUS_TO_IBKR: dict[str, str] = {
+    OrderStatus.PENDING.value:          "PreSubmitted",
+    OrderStatus.SUBMITTED.value:        "Submitted",
+    OrderStatus.PARTIALLY_FILLED.value: "PartiallyFilled",
+    OrderStatus.FILLED.value:           "Filled",
+    OrderStatus.CANCELLED.value:        "Cancelled",
+    OrderStatus.REJECTED.value:         "Inactive",
+}
+
+
+async def _upsert_from_hash_entry(db: AsyncSession, entry: dict, now: datetime) -> None:
+    ibkr_id = int(entry["ibkr_order_id"])
+    is_platform = entry.get("order_ref", "").startswith("pf:")
+    stmt = (
+        pg_insert(IBKROrder)
+        .values(
+            ibkr_order_id=ibkr_id,
+            order_ref=entry.get("order_ref", ""),
+            ticker=entry.get("ticker", ""),
+            exchange=entry.get("exchange", ""),
+            action=entry.get("action", ""),
+            order_type=entry.get("order_type", ""),
+            total_quantity=float(entry.get("total_quantity") or 0),
+            limit_price=entry.get("limit_price"),
+            status=entry.get("status", ""),
+            filled=float(entry.get("filled") or 0),
+            remaining=float(entry.get("remaining") or 0),
+            avg_fill_price=float(entry.get("avg_fill_price") or 0),
+            is_platform_order=is_platform,
+            first_seen_at=now,
+            last_updated_at=now,
+        )
+        .on_conflict_do_update(
+            index_elements=["ibkr_order_id"],
+            set_={
+                "order_ref":        entry.get("order_ref", ""),
+                "ticker":           entry.get("ticker", ""),
+                "exchange":         entry.get("exchange", ""),
+                "action":           entry.get("action", ""),
+                "order_type":       entry.get("order_type", ""),
+                "total_quantity":   float(entry.get("total_quantity") or 0),
+                "status":           entry.get("status", ""),
+                "filled":           float(entry.get("filled") or 0),
+                "remaining":        float(entry.get("remaining") or 0),
+                "avg_fill_price":   float(entry.get("avg_fill_price") or 0),
+                "is_platform_order": is_platform,
+                "last_updated_at":  now,
+            },
+        )
+    )
+    await db.execute(stmt)
+
+
 class SyncOrdersResponse(BaseModel):
-    upserted: int
+    bridge_upserted: int
+    platform_upserted: int
     triggered_bridge_refresh: bool
     message: str
 
@@ -99,76 +158,110 @@ class SyncOrdersResponse(BaseModel):
 @router.post(
     "/ibkr/sync-orders",
     response_model=SyncOrdersResponse,
-    summary="Force-fetch all open IBKR orders and persist them to the DB",
+    summary="Force-fetch all IBKR orders (live + historical platform) and persist to DB",
 )
 async def sync_ibkr_orders(db: AsyncSession = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+
+    # ── 1. Tell the bridge to refresh: reqOpenOrders + reqCompletedOrders ──────
     r = redis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
-        # Tell the bridge to call reqOpenOrders() so IBKR fires openOrderEvent
-        # for every open order — this refreshes bridge:ibkr_orders asynchronously.
         cmd = SyncCommandEvent(action="req_open_orders")
         await r.publish(CHANNEL_COMMANDS, cmd.model_dump_json())
-        triggered = True
 
-        # Give the bridge a moment to receive the command and fire the first callbacks.
+        # Wait for the first bridge callbacks to land
         await asyncio.sleep(1)
 
-        # Read whatever is currently in the hash and upsert everything to the DB.
         raw = await r.hgetall("bridge:ibkr_orders")
     finally:
         await r.aclose()
 
-    now = datetime.now(timezone.utc)
-    upserted = 0
-
+    # ── 2. Upsert everything currently in the bridge:ibkr_orders hash ─────────
+    bridge_upserted = 0
     for entry_json in raw.values():
         try:
             entry = json.loads(entry_json)
         except Exception:
             continue
+        await _upsert_from_hash_entry(db, entry, now)
+        bridge_upserted += 1
 
-        ibkr_id = int(entry["ibkr_order_id"])
-        is_platform = entry.get("order_ref", "").startswith("pf:")
+    # ── 3. Upsert all platform orders from the DB (full history) ──────────────
+    # Aggregate fills per order so we have accurate filled qty and avg price.
+    rows = await db.execute(
+        select(
+            Order,
+            Symbol.ticker,
+            Symbol.exchange,
+            func.coalesce(func.sum(Fill.qty), 0).label("total_filled"),
+            case(
+                (func.sum(Fill.qty) > 0,
+                 func.sum(Fill.qty * Fill.price) / func.sum(Fill.qty)),
+                else_=0,
+            ).label("avg_fill_price"),
+        )
+        .join(Symbol, Symbol.id == Order.symbol_id)
+        .outerjoin(Fill, Fill.order_id == Order.id)
+        .where(Order.ibkr_order_id.is_not(None))
+        .group_by(Order.id, Symbol.ticker, Symbol.exchange)
+    )
+
+    platform_upserted = 0
+    for row in rows:
+        order: Order = row.Order
+        total_filled = float(row.total_filled)
+        avg_px = float(row.avg_fill_price)
+        remaining = float(order.qty) - total_filled
+        ibkr_status = _STATUS_TO_IBKR.get(order.status.value, order.status.value)
 
         stmt = (
             pg_insert(IBKROrder)
             .values(
-                ibkr_order_id=ibkr_id,
-                order_ref=entry.get("order_ref", ""),
-                ticker=entry.get("ticker", ""),
-                exchange=entry.get("exchange", ""),
-                action=entry.get("action", ""),
-                order_type=entry.get("order_type", ""),
-                total_quantity=float(entry.get("total_quantity", 0)),
-                limit_price=entry.get("limit_price"),
-                status=entry.get("status", ""),
-                filled=float(entry.get("filled", 0)),
-                remaining=float(entry.get("remaining", 0)),
-                avg_fill_price=float(entry.get("avg_fill_price", 0)),
-                is_platform_order=is_platform,
-                first_seen_at=now,
+                ibkr_order_id=order.ibkr_order_id,
+                order_ref=order.order_ref,
+                ticker=row.ticker,
+                exchange=row.exchange,
+                action=order.side.value,
+                order_type=order.order_type.value,
+                total_quantity=float(order.qty),
+                limit_price=float(order.limit_price) if order.limit_price else None,
+                status=ibkr_status,
+                filled=total_filled,
+                remaining=max(0.0, remaining),
+                avg_fill_price=avg_px,
+                is_platform_order=True,
+                first_seen_at=order.created_at,   # preserve original timestamp for new rows
                 last_updated_at=now,
             )
             .on_conflict_do_update(
                 index_elements=["ibkr_order_id"],
                 set_={
-                    "order_ref": entry.get("order_ref", ""),
-                    "status": entry.get("status", ""),
-                    "filled": float(entry.get("filled", 0)),
-                    "remaining": float(entry.get("remaining", 0)),
-                    "avg_fill_price": float(entry.get("avg_fill_price", 0)),
-                    "is_platform_order": is_platform,
-                    "last_updated_at": now,
+                    # Refresh status + fill data from our authoritative DB records.
+                    # ticker/exchange/action/order_type are stable — update them too
+                    # in case an earlier row had empty strings from a bridge gap.
+                    "ticker":           row.ticker,
+                    "exchange":         row.exchange,
+                    "action":           order.side.value,
+                    "order_type":       order.order_type.value,
+                    "total_quantity":   float(order.qty),
+                    "status":           ibkr_status,
+                    "filled":           total_filled,
+                    "remaining":        max(0.0, remaining),
+                    "avg_fill_price":   avg_px,
+                    "is_platform_order": True,
+                    "last_updated_at":  now,
                 },
             )
         )
         await db.execute(stmt)
-        upserted += 1
+        platform_upserted += 1
 
+    total = bridge_upserted + platform_upserted
     return SyncOrdersResponse(
-        upserted=upserted,
-        triggered_bridge_refresh=triggered,
-        message=f"Upserted {upserted} order(s) from bridge hash. Bridge refresh triggered — new orders will appear within seconds.",
+        bridge_upserted=bridge_upserted,
+        platform_upserted=platform_upserted,
+        triggered_bridge_refresh=True,
+        message=f"Synced {total} order(s): {bridge_upserted} from IBKR bridge, {platform_upserted} from platform history.",
     )
 
 
