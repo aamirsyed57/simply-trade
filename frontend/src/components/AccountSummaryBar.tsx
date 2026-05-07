@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { accountApi, orderApi } from '../api/index';
+import { accountApi, orderApi, opsApi } from '../api/index';
 
 const APP_TZ = 'Europe/Berlin';
 
@@ -42,6 +42,29 @@ function Tile({ label, value, color }: { label: string; value: string; color?: s
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 20px', borderRight: '1px solid var(--border)' }}>
       <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
       <span style={{ fontSize: 14, fontWeight: 700, color: color ?? 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+    </div>
+  );
+}
+
+function IBKRStatus() {
+  const { data, isError } = useQuery({
+    queryKey: ['ibkrStatus'],
+    queryFn: opsApi.ibkrStatus,
+    refetchInterval: 5_000,
+    retry: false,
+  });
+  const connected = data?.connected && !isError;
+  const color = connected ? '#22c55e' : '#f59e0b';
+  const label = connected ? 'IBKR Connected' : 'IBKR Disconnected';
+  const title = data ? `Paper: ${data.paper_gateway}  Live: ${data.live_gateway}  ${data.note}` : '';
+  return (
+    <div title={title} style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      marginLeft: 'auto', paddingRight: 20, paddingLeft: 20,
+      borderLeft: '1px solid var(--border)', flexShrink: 0,
+    }}>
+      <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}90` }} />
+      <span style={{ fontSize: 11, fontWeight: 600, color, whiteSpace: 'nowrap' }}>{label}</span>
     </div>
   );
 }
@@ -111,6 +134,7 @@ export function AccountSummaryBar() {
       {data.day_trades_remaining !== null && (
         <Tile label="Day Trades Left" value={String(data.day_trades_remaining)} />
       )}
+      <IBKRStatus />
     </div>
   );
 }

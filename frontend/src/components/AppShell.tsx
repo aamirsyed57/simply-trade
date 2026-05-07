@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe } from 'lucide-react';
-import { IBKRStatusIndicator } from './IBKRStatusIndicator';
 import { AccountSummaryBar } from './AccountSummaryBar';
 
 const NAV = [
@@ -69,9 +68,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: 8, paddingBottom: 8 }}>
-          <IBKRStatusIndicator />
-        </div>
       </aside>
 
       {/* Main */}
