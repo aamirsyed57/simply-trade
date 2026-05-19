@@ -88,6 +88,13 @@ export function IBKROrdersPage() {
     },
   });
 
+  const flexSyncMutation = useMutation({
+    mutationFn: opsApi.syncFlexFills,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ibkr-fills'] });
+    },
+  });
+
   const { data: symbols = [] } = useQuery({ queryKey: ['symbols'], queryFn: symbolApi.list });
   const symbolMap = Object.fromEntries(symbols.map(s => [s.id, s]));
 
@@ -142,6 +149,27 @@ export function IBKROrdersPage() {
               {orphanCount} orphan{orphanCount !== 1 ? 's' : ''}
             </div>
           )}
+          <button
+            onClick={() => flexSyncMutation.mutate()}
+            disabled={flexSyncMutation.isPending}
+            title={flexSyncMutation.isError ? String(flexSyncMutation.error) : flexSyncMutation.isSuccess ? flexSyncMutation.data?.message : 'Fetch months of historical fills via IBKR Flex Query API (requires IBKR_FLEX_TOKEN + IBKR_FLEX_QUERY_ID in .env)'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              borderRadius: 7,
+              color: flexSyncMutation.isError ? '#ef4444' : flexSyncMutation.isPending ? 'var(--text-muted)' : 'var(--text-primary)',
+              fontSize: 12, fontWeight: 600, cursor: flexSyncMutation.isPending ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <RefreshCw size={13} style={{ animation: flexSyncMutation.isPending ? 'spin 1s linear infinite' : 'none' }} />
+            {flexSyncMutation.isPending
+              ? 'Fetching…'
+              : flexSyncMutation.isSuccess
+                ? `Flex: +${flexSyncMutation.data?.inserted ?? 0} fills`
+                : flexSyncMutation.isError
+                  ? 'Flex failed'
+                  : 'Sync Flex History'}
+          </button>
           <button
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending}

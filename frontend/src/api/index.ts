@@ -41,6 +41,7 @@ export const opsApi = {
   killSwitch: () => rawRequest<{ live_trading_enabled: boolean; message: string }>('/ops/kill-switch', { method: 'POST' }),
   workerLogs: () => rawRequest<{ logs: string[] }>('/ops/logs/worker?lines=100'),
   syncIbkrOrders: () => rawRequest<{ bridge_upserted: number; platform_upserted: number; triggered_bridge_refresh: boolean; message: string }>('/ops/ibkr/sync-orders', { method: 'POST' }),
+  syncFlexFills: () => rawRequest<{ inserted: number; message: string }>('/ops/ibkr/sync-flex-fills', { method: 'POST' }),
 };
 
 export const symbolApi = {

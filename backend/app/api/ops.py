@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone
 
 import redis.asyncio as redis
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -19,6 +19,7 @@ from app.models.fill import Fill
 from app.models.ibkr_order import IBKROrder
 from app.models.order import Order, OrderStatus
 from app.models.symbol import Symbol
+from app.services.flex_query import FlexQueryError, sync_flex_fills
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -262,6 +263,35 @@ async def sync_ibkr_orders(db: AsyncSession = Depends(get_db)):
         platform_upserted=platform_upserted,
         triggered_bridge_refresh=True,
         message=f"Synced {total} order(s): {bridge_upserted} from IBKR bridge, {platform_upserted} from platform history.",
+    )
+
+
+class SyncFlexFillsResponse(BaseModel):
+    inserted: int
+    message: str
+
+
+@router.post(
+    "/ibkr/sync-flex-fills",
+    response_model=SyncFlexFillsResponse,
+    summary="Fetch historical execution reports via IBKR Flex Query and persist to ibkr_fills",
+)
+async def sync_flex_fills_endpoint(db: AsyncSession = Depends(get_db)):
+    token = settings.IBKR_FLEX_TOKEN
+    query_id = settings.IBKR_FLEX_QUERY_ID
+    if not token or not query_id:
+        raise HTTPException(
+            status_code=422,
+            detail="IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID must be set in .env to use Flex Query sync.",
+        )
+    try:
+        async with db.begin():
+            inserted = await sync_flex_fills(db, token, query_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Flex Query failed: {e}")
+    return SyncFlexFillsResponse(
+        inserted=inserted,
+        message=f"Flex Query sync complete — {inserted} new fill(s) inserted.",
     )
 
 

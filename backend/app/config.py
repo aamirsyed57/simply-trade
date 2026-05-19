@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     TWS_LIVE_HOST: str = "tws-gateway-live"
     TWS_LIVE_PORT: int = 7496
 
+    # IBKR Flex Query (historical execution reports)
+    IBKR_FLEX_TOKEN: str = ""
+    IBKR_FLEX_QUERY_ID: str = ""
+
     # Telegram notifications
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
