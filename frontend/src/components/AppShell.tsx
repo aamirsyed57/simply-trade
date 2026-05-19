@@ -1,10 +1,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe } from 'lucide-react';
+import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe, BarChart2 } from 'lucide-react';
 import { AccountSummaryBar } from './AccountSummaryBar';
 
 const NAV = [
   { to: '/', label: 'Portfolios', icon: LayoutDashboard },
+  { to: '/ibkr-dashboard', label: 'IBKR Dashboard', icon: BarChart2 },
   { to: '/strategies', label: 'Strategies', icon: Library },
   { to: '/backtests', label: 'Backtests', icon: TrendingUp },
   { to: '/historical', label: 'Historical Data', icon: Database },
