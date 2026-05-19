@@ -31,6 +31,10 @@ class FillEvent(BaseModel):
     price: float
     commission: float
     timestamp: datetime
+    ibkr_order_id: int = 0
+    ticker: str = ""
+    exchange: str = ""
+    action: str = ""  # BUY | SELL
 
 class OrderStatusEvent(BaseModel):
     order_ref: str

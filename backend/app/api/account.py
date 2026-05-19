@@ -1,7 +1,7 @@
 """Account summary API endpoint."""
 
 import json
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ import redis.asyncio as aioredis
 
 from app.config import settings
 from app.database import get_db
+from app.models.ibkr_fill import IBKRFill
 from app.models.ibkr_order import IBKROrder
 from app.models.portfolio import Portfolio
 from app.models.position import VirtualPosition
@@ -123,6 +124,7 @@ class IBKROrderEntry(BaseModel):
     avg_fill_price: float
     is_platform_order: bool
     is_live: bool          # True if the order is still open in the bridge right now
+    execution_mode: str    # paper | live | ""
     first_seen_at: str
     last_updated_at: str
 
@@ -167,6 +169,10 @@ async def get_ibkr_orders(db: AsyncSession = Depends(get_db)):
     )
     rows = result.scalars().all()
 
+    def _parse_mode(order_ref: str) -> str:
+        parts = order_ref.split(":")
+        return parts[-1] if len(parts) >= 4 and parts[0] == "pf" else ""
+
     ibkr_orders = [
         IBKROrderEntry(
             ibkr_order_id=row.ibkr_order_id,
@@ -183,6 +189,7 @@ async def get_ibkr_orders(db: AsyncSession = Depends(get_db)):
             avg_fill_price=float(row.avg_fill_price),
             is_platform_order=row.is_platform_order,
             is_live=row.ibkr_order_id in live_ids,
+            execution_mode=_parse_mode(row.order_ref),
             first_seen_at=row.first_seen_at.isoformat(),
             last_updated_at=row.last_updated_at.isoformat(),
         )
@@ -215,3 +222,51 @@ async def get_ibkr_orders(db: AsyncSession = Depends(get_db)):
     ]
 
     return IBKROrdersResponse(ibkr_orders=ibkr_orders, db_orphans=db_orphans)
+
+
+class IBKRFillEntry(BaseModel):
+    id: int
+    ibkr_exec_id: str
+    ibkr_order_id: int | None
+    order_ref: str
+    ticker: str
+    exchange: str
+    action: str
+    qty: float
+    price: float
+    commission: float
+    is_platform_order: bool
+    execution_mode: str
+    timestamp: str
+    first_seen_at: str
+
+
+@router.get("/ibkr-fills", response_model=list[IBKRFillEntry], summary="All persisted IBKR fills")
+async def get_ibkr_fills(
+    mode: str | None = Query(None, description="Filter by execution_mode: paper | live"),
+    db: AsyncSession = Depends(get_db),
+):
+    q = select(IBKRFill).order_by(IBKRFill.timestamp.desc())
+    if mode:
+        q = q.where(IBKRFill.execution_mode == mode)
+    result = await db.execute(q)
+    rows = result.scalars().all()
+    return [
+        IBKRFillEntry(
+            id=row.id,
+            ibkr_exec_id=row.ibkr_exec_id,
+            ibkr_order_id=row.ibkr_order_id,
+            order_ref=row.order_ref,
+            ticker=row.ticker,
+            exchange=row.exchange,
+            action=row.action,
+            qty=float(row.qty),
+            price=float(row.price),
+            commission=float(row.commission),
+            is_platform_order=row.is_platform_order,
+            execution_mode=row.execution_mode,
+            timestamp=row.timestamp.isoformat(),
+            first_seen_at=row.first_seen_at.isoformat(),
+        )
+        for row in rows
+    ]

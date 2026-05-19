@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { ibkrOrdersApi, opsApi, symbolApi, type IBKROrderEntry, type IBKRDBOrphan } from '../api/index';
+import { ibkrOrdersApi, ibkrFillsApi, opsApi, symbolApi, type IBKROrderEntry, type IBKRFillEntry, type IBKRDBOrphan } from '../api/index';
 import { RefreshCw } from 'lucide-react';
 
 const REFRESH_MS = 10_000;
@@ -14,6 +14,7 @@ function fmtTs(iso: string) {
 }
 
 type StatusFilter = 'all' | 'live' | 'filled' | 'cancelled';
+type ModeFilter = 'all' | 'paper' | 'live';
 
 function SourceBadge({ isPlatform }: { isPlatform: boolean }) {
   return (
@@ -47,8 +48,24 @@ function StatusChip({ status }: { status: string }) {
   return <span style={{ fontSize: 11, color, fontWeight: 600 }}>{status}</span>;
 }
 
+function ModeBadge({ mode }: { mode: string }) {
+  if (!mode) return <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>;
+  const isPaper = mode === 'paper';
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, textTransform: 'uppercase' as const,
+      background: isPaper ? 'rgba(99,102,241,0.12)' : 'rgba(34,197,94,0.12)',
+      color: isPaper ? '#6366f1' : '#16a34a',
+    }}>
+      {mode}
+    </span>
+  );
+}
+
 export function IBKROrdersPage() {
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
+  const [fillsMode, setFillsMode] = useState<ModeFilter>('all');
   const qc = useQueryClient();
 
   const { data, isLoading, isError, dataUpdatedAt } = useQuery({
@@ -57,9 +74,18 @@ export function IBKROrdersPage() {
     refetchInterval: REFRESH_MS,
   });
 
+  const fillsQuery = useQuery({
+    queryKey: ['ibkr-fills', fillsMode],
+    queryFn: () => ibkrFillsApi.list(fillsMode === 'all' ? undefined : fillsMode),
+    refetchInterval: REFRESH_MS,
+  });
+
   const syncMutation = useMutation({
     mutationFn: opsApi.syncIbkrOrders,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ibkr-orders'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ibkr-orders'] });
+      qc.invalidateQueries({ queryKey: ['ibkr-fills'] });
+    },
   });
 
   const { data: symbols = [] } = useQuery({ queryKey: ['symbols'], queryFn: symbolApi.list });
@@ -75,6 +101,9 @@ export function IBKROrdersPage() {
     if (filter === 'filled') return o.status.toLowerCase() === 'filled';
     if (filter === 'cancelled') return ['cancelled', 'inactive'].includes(o.status.toLowerCase());
     return true;
+  }).filter(o => {
+    if (modeFilter === 'all') return true;
+    return o.execution_mode === modeFilter;
   });
 
   const filterBtn = (f: StatusFilter, label: string, count?: number) => (
@@ -135,7 +164,7 @@ export function IBKROrdersPage() {
       </div>
 
       {/* All IBKR Orders (persisted) */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>All IBKR Orders</h2>
         <div style={{ display: 'flex', gap: 6 }}>
           {filterBtn('all', 'All', allOrders.length)}
@@ -143,6 +172,16 @@ export function IBKROrdersPage() {
           {filterBtn('filled', 'Filled')}
           {filterBtn('cancelled', 'Cancelled')}
         </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {(['all', 'paper', 'live'] as ModeFilter[]).map(m => (
+          <button key={m} onClick={() => setModeFilter(m)} style={{
+            padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)',
+            background: modeFilter === m ? '#6366f1' : 'var(--bg-surface)',
+            color: modeFilter === m ? '#fff' : 'var(--text-muted)',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' as const,
+          }}>{m}</button>
+        ))}
       </div>
 
       {isLoading ? (
@@ -158,7 +197,7 @@ export function IBKROrdersPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-                {['IBKR ID', 'Ticker', 'Side', 'Qty', 'Type', 'Limit', 'Status', 'Filled', 'Avg Price', 'Order Ref', 'Source', 'First Seen', 'Updated'].map(h => (
+                {['IBKR ID', 'Ticker', 'Side', 'Qty', 'Type', 'Limit', 'Status', 'Filled', 'Avg Price', 'Mode', 'Order Ref', 'Source', 'First Seen', 'Updated'].map(h => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -190,6 +229,7 @@ export function IBKROrdersPage() {
                   <td style={td}><StatusChip status={o.status} /></td>
                   <td style={td}>{o.filled > 0 ? o.filled : '—'}</td>
                   <td style={td}>{o.avg_fill_price > 0 ? fmtPx(o.avg_fill_price) : '—'}</td>
+                  <td style={td}><ModeBadge mode={o.execution_mode} /></td>
                   <td style={td}>
                     <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{o.order_ref || '—'}</span>
                   </td>
@@ -245,6 +285,65 @@ export function IBKROrdersPage() {
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {/* IBKR Fills */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 40 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>IBKR Fills</h2>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>All execution reports — platform and orphan alike</div>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['all', 'paper', 'live'] as ModeFilter[]).map(m => (
+            <button key={m} onClick={() => setFillsMode(m)} style={{
+              padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)',
+              background: fillsMode === m ? '#6366f1' : 'var(--bg-surface)',
+              color: fillsMode === m ? '#fff' : 'var(--text-muted)',
+              fontSize: 11, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' as const,
+            }}>{m}</button>
+          ))}
+        </div>
+      </div>
+      {fillsQuery.isLoading ? (
+        <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Loading fills…</div>
+      ) : (fillsQuery.data ?? []).length === 0 ? (
+        <div style={{ color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '32px 0', textAlign: 'center' }}>
+          No fills recorded yet
+        </div>
+      ) : (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
+                {['Exec ID', 'IBKR Order ID', 'Ticker', 'Side', 'Qty', 'Price', 'Commission', 'Mode', 'Source', 'Order Ref', 'Timestamp'].map(h => (
+                  <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(fillsQuery.data ?? []).map((f: IBKRFillEntry, i: number) => (
+                <tr key={f.id} style={{
+                  borderBottom: i < (fillsQuery.data ?? []).length - 1 ? '1px solid var(--border)' : 'none',
+                  background: !f.is_platform_order ? 'rgba(239,68,68,0.03)' : i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-surface)',
+                }}>
+                  <td style={td}><span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{f.ibkr_exec_id}</span></td>
+                  <td style={td}><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{f.ibkr_order_id ?? '—'}</span></td>
+                  <td style={td}>
+                    <span style={{ fontWeight: 600 }}>{f.ticker || '—'}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>{f.exchange}</span>
+                  </td>
+                  <td style={td}><span style={{ fontWeight: 700, color: f.action === 'BUY' ? '#22c55e' : '#ef4444' }}>{f.action || '—'}</span></td>
+                  <td style={td}>{f.qty}</td>
+                  <td style={td}>{fmtPx(f.price)}</td>
+                  <td style={td}>{f.commission > 0 ? fmtPx(f.commission) : '—'}</td>
+                  <td style={td}><ModeBadge mode={f.execution_mode} /></td>
+                  <td style={td}><SourceBadge isPlatform={f.is_platform_order} /></td>
+                  <td style={td}><span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{f.order_ref || '—'}</span></td>
+                  <td style={td}><span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{fmtTs(f.timestamp)}</span></td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

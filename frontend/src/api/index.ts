@@ -191,8 +191,26 @@ export interface IBKROrderEntry {
   avg_fill_price: number;
   is_platform_order: boolean;
   is_live: boolean;
+  execution_mode: string;
   first_seen_at: string;
   last_updated_at: string;
+}
+
+export interface IBKRFillEntry {
+  id: number;
+  ibkr_exec_id: string;
+  ibkr_order_id: number | null;
+  order_ref: string;
+  ticker: string;
+  exchange: string;
+  action: 'BUY' | 'SELL';
+  qty: number;
+  price: number;
+  commission: number;
+  is_platform_order: boolean;
+  execution_mode: string;
+  timestamp: string;
+  first_seen_at: string;
 }
 
 export interface IBKRDBOrphan {
@@ -215,4 +233,9 @@ export interface IBKROrdersResponse {
 
 export const ibkrOrdersApi = {
   list: () => request<IBKROrdersResponse>('/account/ibkr-orders'),
+};
+
+export const ibkrFillsApi = {
+  list: (mode?: 'paper' | 'live') =>
+    request<IBKRFillEntry[]>(`/account/ibkr-fills${mode ? `?mode=${mode}` : ''}`),
 };

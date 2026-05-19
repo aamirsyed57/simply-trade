@@ -4,9 +4,9 @@ import asyncio
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import redis.asyncio as redis
-from ib_insync import Contract, Order as IBOrder, Trade, Fill
+from ib_insync import Contract, ExecutionFilter, Order as IBOrder, Trade, Fill
 
 from app.config import settings
 from app.bridge.connection import IBKRConnection
@@ -80,15 +80,24 @@ class BridgeService:
             asyncio.create_task(self.redis_pub.set("bridge:connection_status", event.model_dump_json()))
 
     def _on_fill(self, trade: Trade, fill: Fill):
-        order_ref = trade.order.orderRef
+        order_ref = trade.order.orderRef or ""
+        # trade.order.action may be empty for historical fills from reqExecutions();
+        # fall back to execution.side which is always present ("BOT"/"SLD").
+        raw_action = trade.order.action or fill.execution.side
+        action = "BUY" if raw_action.upper() in ("BOT", "BUY") else "SELL"
+        exec_time = getattr(fill.execution, "time", None) or datetime.now(timezone.utc)
         event = FillEvent(
             order_ref=order_ref,
             ibkr_exec_id=fill.execution.execId,
-            symbol_id=0,  # Will be mapped by order_ref in the worker
+            symbol_id=0,  # Mapped by order_ref in the worker
             qty=float(fill.execution.shares),
             price=float(fill.execution.price),
             commission=float(fill.commissionReport.commission) if fill.commissionReport else 0.0,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=exec_time,
+            ibkr_order_id=trade.order.orderId,
+            ticker=trade.contract.symbol,
+            exchange=trade.contract.exchange,
+            action=action,
         )
         asyncio.create_task(self.redis_pub.publish(CHANNEL_FILLS, event.model_dump_json()))
 
@@ -219,15 +228,29 @@ class BridgeService:
     async def _handle_command(self, event_data: str):
         try:
             cmd = SyncCommandEvent.model_validate_json(event_data)
-            if cmd.action == "req_open_orders":
-                logger.info("Sync command — requesting open + completed orders from IBKR")
-                self.ibkr.ib.reqOpenOrders()
-                # reqCompletedOrders returns Trade objects directly (no event in ib_insync 0.9.x)
-                completed = self.ibkr.ib.reqCompletedOrders(apiOnly=False)
-                for trade in completed:
-                    self._on_completed_order(trade)
         except Exception as e:
             logger.error(f"Invalid SyncCommandEvent: {e}")
+            return
+
+        if cmd.action == "req_open_orders":
+            logger.info("Sync command — requesting open orders and executions from IBKR")
+            # reqOpenOrders fires openOrderEvent for each open order; _on_open_order handles them.
+            self.ibkr.ib.reqOpenOrders()
+            # Request all executions via the low-level client (fire-and-forget).
+            # IBKR responds with execDetails messages → execDetailsEvent → _on_fill → CHANNEL_FILLS.
+            # Bypasses the awaitable wrapper that calls run_until_complete() and crashes the bridge.
+            try:
+                req_id = self.ibkr.ib.client.getReqId()
+                # Request fills going back 7 days — maximum TWS retains via this API.
+                week_ago = (datetime.now(timezone.utc).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ) - timedelta(days=7)).strftime("%Y%m%d %H:%M:%S")
+                exec_filter = ExecutionFilter()
+                exec_filter.time = week_ago
+                self.ibkr.ib.client.reqExecutions(req_id, exec_filter)
+                logger.info(f"reqExecutions sent (reqId={req_id}, since={week_ago})")
+            except Exception as e:
+                logger.error(f"reqExecutions failed: {e}")
 
     async def _redis_listener(self):
         await self.pubsub.subscribe(CHANNEL_ORDER_REQUESTS, CHANNEL_EMERGENCY, CHANNEL_COMMANDS)

@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.workers.celery_app import celery_app
 from app.config import settings
 from app.database import AsyncSessionLocal
+from app.models.ibkr_fill import IBKRFill
 from app.models.ibkr_order import IBKROrder
 from app.models.order import Order, OrderStatus
 from app.services.order_service import OrderManager
@@ -62,6 +63,33 @@ async def _upsert_ibkr_order(session, entry: dict) -> None:
     await session.execute(stmt)
 
 
+async def _upsert_ibkr_fill(session, data: dict) -> None:
+    """Insert into ibkr_fills, skip if ibkr_exec_id already exists."""
+    order_ref = data.get("order_ref", "")
+    parts = order_ref.split(":")
+    execution_mode = parts[-1] if len(parts) >= 4 and parts[0] == "pf" else ""
+    ibkr_order_id_raw = int(data.get("ibkr_order_id", 0) or 0)
+    stmt = (
+        pg_insert(IBKRFill)
+        .values(
+            ibkr_exec_id=data["ibkr_exec_id"],
+            ibkr_order_id=ibkr_order_id_raw if ibkr_order_id_raw else None,
+            order_ref=order_ref,
+            ticker=data.get("ticker", ""),
+            exchange=data.get("exchange", ""),
+            action=data.get("action", ""),
+            qty=float(data["qty"]),
+            price=float(data["price"]),
+            commission=float(data.get("commission", 0)),
+            is_platform_order=order_ref.startswith("pf:"),
+            execution_mode=execution_mode,
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+        )
+        .on_conflict_do_nothing(index_elements=["ibkr_exec_id"])
+    )
+    await session.execute(stmt)
+
+
 async def _handle_fill(data: dict) -> None:
     order_ref = data["order_ref"]
     qty = float(data["qty"])
@@ -69,6 +97,7 @@ async def _handle_fill(data: dict) -> None:
 
     async with AsyncSessionLocal() as session:
         async with session.begin():
+            await _upsert_ibkr_fill(session, data)
             om = OrderManager(session)
             fill = await om.handle_fill(
                 order_ref=order_ref,

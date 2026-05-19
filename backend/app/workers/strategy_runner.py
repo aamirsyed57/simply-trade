@@ -6,7 +6,7 @@ import logging
 from sqlalchemy import select
 
 from app.workers.celery_app import celery_app
-from app.database import async_sessionmaker
+from app.database import AsyncSessionLocal
 from app.models.assignment import PortfolioSymbolStrategy
 from app.models.symbol import Symbol
 from app.services.order_service import InsufficientCashError, OrderManager
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 async def _run_tick(assignment_id: int):
     """Core async logic for a strategy tick."""
-    async with async_sessionmaker() as session:
+    async with AsyncSessionLocal() as session:
         assignment = await session.get(PortfolioSymbolStrategy, assignment_id)
 
         if not assignment:
@@ -119,7 +119,7 @@ def dispatch_all_assignments():
     only those whose exchange is currently open.
     """
     async def _fetch():
-        async with async_sessionmaker() as session:
+        async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(PortfolioSymbolStrategy.id, Symbol.exchange)
                 .join(Symbol, Symbol.id == PortfolioSymbolStrategy.symbol_id)
