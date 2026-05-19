@@ -234,19 +234,22 @@ class BridgeService:
 
         if cmd.action == "req_open_orders":
             logger.info("Sync command — requesting open orders and executions from IBKR")
-            # reqOpenOrders fires openOrderEvent for each open order; _on_open_order handles them.
-            self.ibkr.ib.reqOpenOrders()
-            # Request all executions via the low-level client (fire-and-forget).
-            # IBKR responds with execDetails messages → execDetailsEvent → _on_fill → CHANNEL_FILLS.
-            # Bypasses the awaitable wrapper that calls run_until_complete() and crashes the bridge.
             try:
-                req_id = self.ibkr.ib.client.getReqId()
-                # Request fills going back 7 days — maximum TWS retains via this API.
+                # Must use the async variant — the sync reqOpenOrders() calls
+                # loop.run_until_complete() internally, which crashes the bridge
+                # when already inside an async context.
+                await self.ibkr.ib.reqOpenOrdersAsync()
+            except Exception as e:
+                logger.error(f"reqOpenOrdersAsync failed: {e}")
+            try:
+                # Fire-and-forget via the low-level client so fills come back through
+                # execDetailsEvent → _on_fill → CHANNEL_FILLS without blocking.
                 week_ago = (datetime.now(timezone.utc).replace(
                     hour=0, minute=0, second=0, microsecond=0
-                ) - timedelta(days=7)).strftime("%Y%m%d %H:%M:%S")
+                ) - timedelta(days=7)).strftime("%Y%m%d-%H:%M:%S")
                 exec_filter = ExecutionFilter()
                 exec_filter.time = week_ago
+                req_id = self.ibkr.ib.client.getReqId()
                 self.ibkr.ib.client.reqExecutions(req_id, exec_filter)
                 logger.info(f"reqExecutions sent (reqId={req_id}, since={week_ago})")
             except Exception as e:
