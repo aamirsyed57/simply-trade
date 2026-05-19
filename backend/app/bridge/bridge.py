@@ -79,17 +79,35 @@ class BridgeService:
             # bridge reconnects and the heartbeat starts refreshing again.
             asyncio.create_task(self.redis_pub.set("bridge:connection_status", event.model_dump_json()))
 
+    def _publish_fill(self, fill: Fill) -> None:
+        """Build a FillEvent from an ib_insync Fill and publish to CHANNEL_FILLS."""
+        raw_side = getattr(fill.execution, "side", "").upper()
+        action = "BUY" if raw_side in ("BOT", "BUY") else "SELL"
+        exec_time = getattr(fill.execution, "time", None) or datetime.now(timezone.utc)
+        event = FillEvent(
+            order_ref=fill.execution.orderRef or "",
+            ibkr_exec_id=fill.execution.execId,
+            symbol_id=0,
+            qty=float(fill.execution.shares),
+            price=float(fill.execution.price),
+            commission=float(fill.commissionReport.commission) if fill.commissionReport else 0.0,
+            timestamp=exec_time,
+            ibkr_order_id=fill.execution.orderId,
+            ticker=fill.contract.symbol,
+            exchange=fill.contract.exchange,
+            action=action,
+        )
+        asyncio.create_task(self.redis_pub.publish(CHANNEL_FILLS, event.model_dump_json()))
+
     def _on_fill(self, trade: Trade, fill: Fill):
-        order_ref = trade.order.orderRef or ""
-        # trade.order.action may be empty for historical fills from reqExecutions();
-        # fall back to execution.side which is always present ("BOT"/"SLD").
+        # Prefer order-level action (BUY/SELL); fall back to execution.side (BOT/SLD).
         raw_action = trade.order.action or fill.execution.side
         action = "BUY" if raw_action.upper() in ("BOT", "BUY") else "SELL"
         exec_time = getattr(fill.execution, "time", None) or datetime.now(timezone.utc)
         event = FillEvent(
-            order_ref=order_ref,
+            order_ref=trade.order.orderRef or "",
             ibkr_exec_id=fill.execution.execId,
-            symbol_id=0,  # Mapped by order_ref in the worker
+            symbol_id=0,
             qty=float(fill.execution.shares),
             price=float(fill.execution.price),
             commission=float(fill.commissionReport.commission) if fill.commissionReport else 0.0,
@@ -235,25 +253,24 @@ class BridgeService:
         if cmd.action == "req_open_orders":
             logger.info("Sync command — requesting open orders and executions from IBKR")
             try:
-                # Must use the async variant — the sync reqOpenOrders() calls
-                # loop.run_until_complete() internally, which crashes the bridge
-                # when already inside an async context.
                 await self.ibkr.ib.reqOpenOrdersAsync()
             except Exception as e:
                 logger.error(f"reqOpenOrdersAsync failed: {e}")
             try:
-                # Fire-and-forget via the low-level client so fills come back through
-                # execDetailsEvent → _on_fill → CHANNEL_FILLS without blocking.
+                # reqExecutionsAsync registers a future so fills go into _results, not
+                # execDetailsEvent. We publish them manually via _publish_fill.
+                # ON CONFLICT DO NOTHING in fill_handler makes duplicates harmless.
                 week_ago = (datetime.now(timezone.utc).replace(
                     hour=0, minute=0, second=0, microsecond=0
                 ) - timedelta(days=7)).strftime("%Y%m%d-%H:%M:%S")
                 exec_filter = ExecutionFilter()
                 exec_filter.time = week_ago
-                req_id = self.ibkr.ib.client.getReqId()
-                self.ibkr.ib.client.reqExecutions(req_id, exec_filter)
-                logger.info(f"reqExecutions sent (reqId={req_id}, since={week_ago})")
+                fills = await self.ibkr.ib.reqExecutionsAsync(exec_filter)
+                for fill in fills:
+                    self._publish_fill(fill)
+                logger.info(f"Sync: published {len(fills)} fill(s) since {week_ago}")
             except Exception as e:
-                logger.error(f"reqExecutions failed: {e}")
+                logger.error(f"reqExecutionsAsync failed: {e}")
 
     async def _redis_listener(self):
         await self.pubsub.subscribe(CHANNEL_ORDER_REQUESTS, CHANNEL_EMERGENCY, CHANNEL_COMMANDS)
@@ -273,13 +290,21 @@ class BridgeService:
     async def _check_initial_connection(self):
         while not self.ibkr.connected:
             await asyncio.sleep(1)
+        # reqAccountUpdates is called automatically by ib_insync during connectAsync.
+        # Calling it again here is redundant and it is a blocking call that crashes in
+        # an already-running event loop, so we skip it.
         try:
-            self.ibkr.ib.reqAccountUpdates(True)
-            # Trigger openOrderEvent for all existing IBKR open orders so
-            # _on_open_order populates bridge:ibkr_orders on startup.
-            self.ibkr.ib.reqOpenOrders()
+            await self.ibkr.ib.reqOpenOrdersAsync()
         except Exception as e:
-            logger.error(f"Failed to request initial data: {e}")
+            logger.error(f"reqOpenOrdersAsync (startup) failed: {e}")
+        # ib_insync runs reqExecutionsAsync during its own sync phase but fills only go
+        # into _results[reqId] — execDetailsEvent is NOT emitted for them. Publish them
+        # directly so fill_handler can persist them to ibkr_fills.
+        startup_fills = list(self.ibkr.ib.fills())
+        for fill in startup_fills:
+            self._publish_fill(fill)
+        if startup_fills:
+            logger.info(f"Published {len(startup_fills)} fill(s) from startup sync")
 
     async def _heartbeat(self):
         """Refresh bridge:connection_status every 15 s while connected.
