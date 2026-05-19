@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal } from 'lucide-react';
-import { IBKRStatusIndicator } from './IBKRStatusIndicator';
+import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe } from 'lucide-react';
+import { AccountSummaryBar } from './AccountSummaryBar';
 
 const NAV = [
   { to: '/', label: 'Portfolios', icon: LayoutDashboard },
@@ -9,6 +9,8 @@ const NAV = [
   { to: '/backtests', label: 'Backtests', icon: TrendingUp },
   { to: '/historical', label: 'Historical Data', icon: Database },
   { to: '/logs', label: 'Worker Logs', icon: Terminal },
+  { to: '/ibkr-orders', label: 'IBKR Orders', icon: AlertOctagon },
+  { to: '/exchange-hours', label: 'Exchange Hours', icon: Globe },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -66,14 +68,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: 8, paddingBottom: 8 }}>
-          <IBKRStatusIndicator />
-        </div>
       </aside>
 
       {/* Main */}
-      <main style={{ flex: 1, overflow: 'auto' }}>
-        {children}
+      <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <AccountSummaryBar />
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {children}
+        </div>
       </main>
     </div>
   );

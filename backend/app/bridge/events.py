@@ -9,6 +9,7 @@ CHANNEL_FILLS = "orders:fills"
 CHANNEL_ORDER_STATUS = "orders:status"
 CHANNEL_CONNECTION_STATUS = "bridge:connection"
 CHANNEL_EMERGENCY = "bridge:emergency"
+CHANNEL_COMMANDS = "bridge:commands"
 
 class OrderRequestEvent(BaseModel):
     portfolio_id: int
@@ -30,13 +31,25 @@ class FillEvent(BaseModel):
     price: float
     commission: float
     timestamp: datetime
+    ibkr_order_id: int = 0
+    ticker: str = ""
+    exchange: str = ""
+    action: str = ""  # BUY | SELL
 
 class OrderStatusEvent(BaseModel):
     order_ref: str
+    ibkr_order_id: int
     status: str
     filled: float
     remaining: float
     avg_fill_price: float
+    # Optional — populated when we have the full Trade object (open_order, completed_order)
+    ticker: str = ""
+    exchange: str = ""
+    action: str = ""
+    order_type: str = ""
+    total_quantity: float = 0.0
+    limit_price: float | None = None
 
 class ConnectionStatusEvent(BaseModel):
     connected: bool
@@ -45,3 +58,6 @@ class ConnectionStatusEvent(BaseModel):
 
 class EmergencyEvent(BaseModel):
     action: str  # cancel_all
+
+class SyncCommandEvent(BaseModel):
+    action: str  # req_open_orders

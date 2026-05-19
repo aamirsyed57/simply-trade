@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { portfolioApi } from '../api/portfolios';
-import { assignmentApi, symbolApi, strategyApi, type Assignment } from '../api/index';
+import { assignmentApi, symbolApi, strategyApi, orderApi, positionApi, type Assignment, type Order, type Position } from '../api/index';
 import { CashPanel } from '../components/CashPanel';
 import { ModeBadge } from '../components/ModeBadge';
 import { AssignStrategyModal } from '../components/AssignStrategyModal';
-import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Zap, AlertTriangle } from 'lucide-react';
+import { ManualTradeModal } from '../components/ManualTradeModal';
+import { RetryFillModal } from '../components/RetryFillModal';
+import { isTradingSession } from '../utils/marketHours';
 
 export function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,9 +30,21 @@ export function PortfolioDetailPage() {
 
   const { data: symbols = [] } = useQuery({ queryKey: ['symbols'], queryFn: symbolApi.list });
   const { data: strategies = [] } = useQuery({ queryKey: ['strategies'], queryFn: strategyApi.list });
+  const { data: positions = [] } = useQuery<Position[]>({
+    queryKey: ['positions', portfolioId],
+    queryFn: () => positionApi.list(portfolioId),
+    refetchInterval: 10_000,
+  });
+  const { data: orders = [] } = useQuery<Order[]>({
+    queryKey: ['orders', portfolioId],
+    queryFn: () => orderApi.list(portfolioId),
+    refetchInterval: 10_000,
+  });
 
   const [showAssign, setShowAssign] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [tradingAssignment, setTradingAssignment] = useState<Assignment | null>(null);
+  const [retryOrder, setRetryOrder] = useState<Order | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: (assignmentId: number) => assignmentApi.delete(assignmentId),
@@ -38,15 +53,25 @@ export function PortfolioDetailPage() {
 
   const toggleMutation = useMutation({
     mutationFn: ({ aid, enabled }: { aid: number; enabled: boolean }) =>
-      assignmentApi.patch(portfolioId, aid, { enabled } as any),
+      assignmentApi.patch(aid, { enabled } as any),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['assignments', portfolioId] }),
   });
 
   const symbolMap = Object.fromEntries(symbols.map(s => [s.id, s]));
   const stratMap = Object.fromEntries(strategies.map(s => [s.code, s]));
+  const positionMap = Object.fromEntries(positions.map(p => [p.symbol_id, p]));
+  const pendingBySymbol: Record<number, Order[]> = {};
+  for (const o of orders) {
+    if (o.status === 'pending' || o.status === 'submitted') {
+      (pendingBySymbol[o.symbol_id] ??= []).push(o);
+    }
+  }
 
   const fmt = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+  const fmtPx = (v: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+  const fmtPnl = (v: number) => `${v >= 0 ? '+' : ''}${fmtPx(v)}`;
 
   if (!portfolio) return <div style={{ padding: 32, color: 'var(--text-muted)' }}>Loading…</div>;
 
@@ -92,7 +117,7 @@ export function PortfolioDetailPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-                {['Symbol', 'Strategy', 'Allocation', 'Params', 'Status', 'Actions'].map(h => (
+                {['Symbol', 'Strategy', 'Allocation', 'Capital Used', 'Params', 'Position', 'Pending', 'Status', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
@@ -116,9 +141,68 @@ export function PortfolioDetailPage() {
                     </td>
                     <td style={td}><span style={{ fontWeight: 600 }}>{fmt(a.allocation)}</span></td>
                     <td style={td}>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {(() => {
+                        const mv = positionMap[a.symbol_id]?.market_value ?? 0;
+                        const pct = a.allocation > 0 ? Math.min((mv / a.allocation) * 100, 100) : 0;
+                        const barColor = pct > 90 ? '#f59e0b' : '#4f7df3';
+                        return (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 600 }}>{fmtPx(mv)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ {fmt(a.allocation)}</span></div>
+                            <div style={{ marginTop: 4, height: 4, borderRadius: 2, background: 'var(--border)', width: 80 }}>
+                              <div style={{ height: '100%', borderRadius: 2, background: barColor, width: `${pct}%` }} />
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{pct.toFixed(0)}% deployed</div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td style={td}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {Object.entries(a.params ?? {}).map(([k, v]) => `${k}=${v}`).join(', ') || '—'}
                       </div>
+                    </td>
+                    <td style={td}>
+                      {(() => {
+                        const pos = positionMap[a.symbol_id];
+                        if (!pos || pos.qty === 0) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
+                        const pnlColor = pos.unrealized_pnl >= 0 ? '#22c55e' : '#ef4444';
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 12 }}>{pos.qty} sh @ {fmtPx(pos.avg_price)}</div>
+                            <div style={{ fontSize: 11, color: pnlColor }}>{fmtPnl(pos.unrealized_pnl)}</div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td style={td}>
+                      {(() => {
+                        const pending = pendingBySymbol[a.symbol_id] ?? [];
+                        if (!pending.length) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {pending.map(o => (
+                              <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <span style={{
+                                  fontSize: 11, fontFamily: 'monospace', whiteSpace: 'nowrap',
+                                  color: o.side === 'BUY' ? '#22c55e' : '#ef4444',
+                                }}>
+                                  {o.side} {o.qty} {o.order_type}{o.limit_price ? ` @ ${fmtPx(o.limit_price)}` : ''}
+                                </span>
+                                {o.ibkr_order_id === null && (
+                                  <button
+                                    onClick={() => isTradingSession(sym?.exchange) && setRetryOrder(o)}
+                                    title={isTradingSession(sym?.exchange) ? 'No IBKR order ID — click to retry via bridge' : 'Market closed — retry unavailable'}
+                                    disabled={!isTradingSession(sym?.exchange)}
+                                    style={{ background: 'none', border: 'none', cursor: isTradingSession(sym?.exchange) ? 'pointer' : 'not-allowed', padding: 0, display: 'flex', alignItems: 'center', opacity: isTradingSession(sym?.exchange) ? 1 : 0.4 }}
+                                  >
+                                    <AlertTriangle size={13} color="#f59e0b" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={td}>
                       <button
@@ -132,6 +216,7 @@ export function PortfolioDetailPage() {
                     </td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6 }}>
+                        <ActionBtn onClick={() => setTradingAssignment(a)} title={isTradingSession(sym?.exchange) ? 'Manual trade' : 'Market closed'} disabled={!isTradingSession(sym?.exchange)}><Zap size={12} /></ActionBtn>
                         <ActionBtn onClick={() => setEditingAssignment(a)} title="Edit"><Pencil size={12} /></ActionBtn>
                         <ActionBtn danger onClick={() => { if (confirm('Remove assignment?')) deleteMutation.mutate(a.id); }} title="Remove"><Trash2 size={12} /></ActionBtn>
                       </div>
@@ -151,20 +236,41 @@ export function PortfolioDetailPage() {
           onClose={() => { setShowAssign(false); setEditingAssignment(null); }}
         />
       )}
+
+      {tradingAssignment && (
+        <ManualTradeModal
+          portfolioId={portfolioId}
+          symbolId={tradingAssignment.symbol_id}
+          ticker={symbolMap[tradingAssignment.symbol_id]?.ticker ?? String(tradingAssignment.symbol_id)}
+          strategyCode={tradingAssignment.strategy_code}
+          onClose={() => setTradingAssignment(null)}
+        />
+      )}
+
+      {retryOrder && (
+        <RetryFillModal
+          order={retryOrder}
+          ticker={symbolMap[retryOrder.symbol_id]?.ticker ?? String(retryOrder.symbol_id)}
+          onClose={() => setRetryOrder(null)}
+        />
+      )}
     </div>
   );
 }
 
 const td: React.CSSProperties = { padding: '12px 16px', fontSize: 13, verticalAlign: 'middle' };
 
-function ActionBtn({ children, onClick, title, danger }: { children: React.ReactNode; onClick: () => void; title: string; danger?: boolean }) {
+function ActionBtn({ children, onClick, title, danger, disabled }: { children: React.ReactNode; onClick: () => void; title: string; danger?: boolean; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}
       title={title}
+      disabled={disabled}
       style={{
         background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 5,
-        padding: '4px 7px', cursor: 'pointer', color: danger ? 'var(--danger)' : 'var(--text-muted)', display: 'flex', alignItems: 'center',
+        padding: '4px 7px', cursor: disabled ? 'not-allowed' : 'pointer',
+        color: disabled ? 'var(--text-muted)' : danger ? 'var(--danger)' : 'var(--text-muted)',
+        opacity: disabled ? 0.4 : 1, display: 'flex', alignItems: 'center',
       }}
     >
       {children}

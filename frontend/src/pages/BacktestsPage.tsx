@@ -18,8 +18,8 @@ interface Backtest {
   status: string; error_message?: string;
 }
 interface BtResult { metrics: Record<string, number>; per_symbol_metrics: Record<string, Record<string, number>>; }
-interface EquityPoint { ts: string; equity: number; }
-interface DrawPoint { ts: string; drawdown: number; }
+interface EquityPoint { ts: string; equity: number; [k: string]: unknown; }
+interface DrawPoint { ts: string; drawdown: number; [k: string]: unknown; }
 interface Trade { symbol_id: number; direction: string; qty: number; entry_price: number; exit_price: number; pnl: number; commission: number; exit_ts: string; }
 
 const api = {
@@ -40,7 +40,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 const STATUS_COLOR: Record<string, string> = { pending: '#f59e0b', running: '#4f7df3', completed: '#22c55e', failed: '#ef4444' };
 
 // ── Mini SVG line chart ──
-function LineChart({ data, valueKey, color, height = 80 }: { data: Record<string, number>[]; valueKey: string; color: string; height?: number }) {
+function LineChart({ data, valueKey, color, height = 80 }: { data: Record<string, unknown>[]; valueKey: string; color: string; height?: number }) {
   if (!data.length) return null;
   const W = 500, H = height, P = 6;
   const vals = data.map(d => d[valueKey] as number);
@@ -64,7 +64,7 @@ function LineChart({ data, valueKey, color, height = 80 }: { data: Record<string
 }
 
 // ── Metric grid ──
-function MetricGrid({ metrics, symbolMap }: { metrics: Record<string, number>; symbolMap: Record<number, string> }) {
+function MetricGrid({ metrics }: { metrics: Record<string, number> }) {
   const fmtUsd = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
   const rows: [string, string][] = [
     ['CAGR', `${metrics.cagr?.toFixed(2)}%`],
@@ -233,7 +233,7 @@ export function BacktestsPage() {
                 </div>
 
                 {resultTab === 'metrics' && btResult && (
-                  <MetricGrid metrics={btResult.metrics} symbolMap={symbolMap} />
+                  <MetricGrid metrics={btResult.metrics} />
                 )}
 
                 {resultTab === 'equity' && btEquity && (

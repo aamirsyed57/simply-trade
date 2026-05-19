@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignmentApi, strategyApi, symbolApi, type Assignment, type CreateAssignmentPayload } from '../api/index';
+import { portfolioApi } from '../api/portfolios';
 import { StrategyParamsForm } from './StrategyParamsForm';
 import { Overlay, Field, inputStyle, btnPriStyle, btnSecStyle, h2Style } from './CreatePortfolioModal';
 
@@ -15,6 +16,8 @@ export function AssignStrategyModal({ portfolioId, existing, onClose }: Props) {
 
   const { data: symbols = [] } = useQuery({ queryKey: ['symbols'], queryFn: symbolApi.list });
   const { data: strategies = [] } = useQuery({ queryKey: ['strategies'], queryFn: strategyApi.list });
+  const { data: portfolio } = useQuery({ queryKey: ['portfolios', portfolioId], queryFn: () => portfolioApi.get(portfolioId) });
+  const { data: assignments = [] } = useQuery({ queryKey: ['assignments', portfolioId], queryFn: () => assignmentApi.list(portfolioId) });
 
   const [symbolId, setSymbolId] = useState(String(existing?.symbol_id ?? ''));
   const [stratCode, setStratCode] = useState(existing?.strategy_code ?? '');
@@ -45,12 +48,24 @@ export function AssignStrategyModal({ portfolioId, existing, onClose }: Props) {
     if (strat) setParams(strat.default_params);
   };
 
+  // Budget remaining = portfolio total − sum of other assignments (exclude self when editing)
+  const otherAllocated = assignments
+    .filter(a => a.id !== existing?.id)
+    .reduce((sum, a) => sum + a.allocation, 0);
+  const budgetTotal = portfolio?.budget_total ?? 0;
+  const remaining = budgetTotal - otherAllocated;
+
+  const fmt = (v: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!symbolId || !stratCode) return setError('Symbol and strategy are required');
     const alloc = parseFloat(allocation);
     if (isNaN(alloc) || alloc <= 0) return setError('Allocation must be > 0');
+    if (budgetTotal > 0 && alloc > remaining)
+      return setError(`Allocation exceeds remaining budget of ${fmt(remaining)} (${fmt(budgetTotal)} total − ${fmt(otherAllocated)} already allocated)`);
     mutation.mutate({ portfolio_id: portfolioId, symbol_id: parseInt(symbolId), strategy_code: stratCode, params, allocation: alloc });
   };
 
@@ -73,7 +88,12 @@ export function AssignStrategyModal({ portfolioId, existing, onClose }: Props) {
           </select>
         </Field>
         <Field label="Allocation (USD)">
-          <input type="number" style={inputStyle} value={allocation} onChange={e => setAllocation(e.target.value)} min={1} />
+          <input type="number" style={inputStyle} value={allocation} onChange={e => setAllocation(e.target.value)} min={1} max={remaining || undefined} />
+          {budgetTotal > 0 && (
+            <div style={{ fontSize: 11, marginTop: 5, color: parseFloat(allocation) > remaining ? 'var(--danger)' : 'var(--text-muted)' }}>
+              {fmt(remaining)} remaining of {fmt(budgetTotal)} total
+            </div>
+          )}
         </Field>
         {selectedStrategy && (
           <div>
