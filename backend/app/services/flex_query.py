@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 _SEND_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest"
 _MAX_POLLS = 20
-_POLL_DELAY = 2.0  # seconds between polls
+_POLL_DELAY = 2.0  # seconds between GetStatement polls
+_SEND_RETRIES = 5
+_SEND_RETRY_DELAY = 10.0  # seconds between SendRequest retries on transient errors
 
 
 class FlexQueryError(Exception):
@@ -86,24 +88,36 @@ def _elem_to_fill(elem: ET.Element) -> dict:
 
 
 async def _send_request(client: httpx.AsyncClient, token: str, query_id: str) -> tuple[str, str]:
-    """Initiate a Flex Query and return (reference_code, get_url)."""
-    resp = await client.get(
-        _SEND_URL,
-        params={"t": token, "q": query_id, "v": "3"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    root = ET.fromstring(resp.text)
-    status = root.findtext("Status", "")
-    if status != "Success":
+    """Initiate a Flex Query and return (reference_code, get_url).
+
+    Retries on transient IBKR errors (1001 = busy, 1012 = too frequent).
+    """
+    last_error = ""
+    for attempt in range(_SEND_RETRIES):
+        resp = await client.get(
+            _SEND_URL,
+            params={"t": token, "q": query_id, "v": "3"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        root = ET.fromstring(resp.text)
+        status = root.findtext("Status", "")
+        if status == "Success":
+            ref = root.findtext("ReferenceCode", "")
+            url = root.findtext("Url", "")
+            if not ref or not url:
+                raise FlexQueryError(f"SendRequest missing ReferenceCode or Url: {resp.text[:200]}")
+            return ref, url
         code = root.findtext("ErrorCode", "")
         msg = root.findtext("ErrorMessage", resp.text[:200])
-        raise FlexQueryError(f"SendRequest failed [{code}]: {msg}")
-    ref = root.findtext("ReferenceCode", "")
-    url = root.findtext("Url", "")
-    if not ref or not url:
-        raise FlexQueryError(f"SendRequest missing ReferenceCode or Url: {resp.text[:200]}")
-    return ref, url
+        last_error = f"[{code}]: {msg}"
+        # 1001 = temporarily unavailable, 1012 = too frequent — both are transient
+        if code in ("1001", "1012") and attempt < _SEND_RETRIES - 1:
+            logger.warning(f"Flex SendRequest transient error {last_error}, retrying in {_SEND_RETRY_DELAY:.0f}s (attempt {attempt + 1}/{_SEND_RETRIES})")
+            await asyncio.sleep(_SEND_RETRY_DELAY)
+            continue
+        raise FlexQueryError(f"SendRequest failed {last_error}")
+    raise FlexQueryError(f"SendRequest failed after {_SEND_RETRIES} attempts: {last_error}")
 
 
 async def _fetch_statement(client: httpx.AsyncClient, token: str, ref_code: str, get_url: str) -> ET.Element:
