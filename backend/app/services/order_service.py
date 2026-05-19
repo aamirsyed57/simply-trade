@@ -14,6 +14,7 @@ from app.models.order import Order, OrderSide, OrderStatus, OrderType
 from app.models.portfolio import Portfolio
 from app.models.position import VirtualPosition
 from app.strategies.signals import Signal
+from app.services.notification_service import notifier
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,15 @@ class OrderManager:
 
         await self.db.flush()
         logger.info(f"Processed fill: order_ref={order_ref}, qty={qty}, price={price}")
+        
+        try:
+            await notifier.send(
+                "fill", 
+                f"Order Filled:\nRef: {order_ref}\nSymbol ID: {order.symbol_id}\nSide: {order.side.value}\nQty: {qty}\nPrice: {price}\nPortfolio ID: {order.portfolio_id}"
+            )
+        except Exception as e:
+            logger.error(f"Error sending fill notification: {e}")
+
         return fill
 
     # IBKR status strings → our OrderStatus

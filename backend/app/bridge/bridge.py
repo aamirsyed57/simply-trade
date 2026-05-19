@@ -63,12 +63,16 @@ class BridgeService:
         )
 
     def _on_connection_change(self, connected: bool):
+        from app.services.notification_service import notifier
         event = ConnectionStatusEvent(
             connected=connected,
             gateway_mode="paper",
             note="Connected to paper gateway" if connected else "Disconnected from paper gateway",
         )
         asyncio.create_task(self.redis_pub.publish(CHANNEL_CONNECTION_STATUS, event.model_dump_json()))
+        
+        asyncio.create_task(notifier.send("bridge_disconnect", f"IBKR Bridge Connection Status: {'CONNECTED' if connected else 'DISCONNECTED'}"))
+        
         if connected:
             # Short TTL: expires 30 s after last write. Heartbeat keeps it alive
             # while running; if the bridge crashes, the key expires and the API

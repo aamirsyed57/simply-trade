@@ -37,6 +37,8 @@ app.include_router(positions.router, prefix="/api/v1")
 app.include_router(historical.router, prefix="/api/v1")
 app.include_router(account.router, prefix="/api/v1")
 app.include_router(backtests.router, prefix="/api/v1")
+from app.api import settings
+app.include_router(settings.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["ops"])
