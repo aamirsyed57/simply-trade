@@ -47,3 +47,12 @@ async def update_settings(settings: NotificationSettings):
     notifier.base_url = f"https://api.telegram.org/bot{notifier.bot_token}/sendMessage"
     
     return settings
+
+@router.post("/test-notification")
+async def test_notification():
+    from app.services.notification_service import notifier
+    try:
+        await notifier.send("test", "🔔 This is a test notification from AutoTrader!")
+        return {"status": "success", "message": "Test notification sent successfully."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

@@ -32,11 +32,27 @@ export function SettingsPage() {
     onError: () => alert('Failed to save settings'),
   });
 
+  const testMutation = useMutation({
+    mutationFn: () => req('/settings/test-notification', { method: 'POST' }),
+    onSuccess: (data: any) => {
+      if (data.status === 'success') {
+        alert('Test notification sent successfully!');
+      } else {
+        alert('Failed to send test notification: ' + data.message);
+      }
+    },
+    onError: () => alert('Failed to trigger test notification'),
+  });
+
   const handleSave = () => {
     mutation.mutate({
       telegram_bot_token: botToken,
       telegram_chat_id: chatId,
     });
+  };
+
+  const handleTest = () => {
+    testMutation.mutate();
   };
 
   const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' };
@@ -63,13 +79,23 @@ export function SettingsPage() {
           <input style={inp} value={chatId} onChange={e => setChatId(e.target.value)} placeholder="-1001234567890" />
         </div>
 
-        <button 
-          onClick={handleSave} 
-          disabled={mutation.isPending}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
-        >
-          <Save size={16} /> {mutation.isPending ? 'Saving...' : 'Save Settings'}
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button 
+            onClick={handleSave} 
+            disabled={mutation.isPending}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <Save size={16} /> {mutation.isPending ? 'Saving...' : 'Save Settings'}
+          </button>
+          
+          <button 
+            onClick={handleTest} 
+            disabled={testMutation.isPending || !botToken || !chatId}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <Bell size={16} /> {testMutation.isPending ? 'Sending...' : 'Send Test Notification'}
+          </button>
+        </div>
       </div>
     </div>
   );
