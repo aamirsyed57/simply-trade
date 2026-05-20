@@ -233,3 +233,6 @@ redis_data/
 # Alembic — keep migration scripts, skip cache
 migrations/__pycache__/
 *.resolved
+
+# Graphify 
+/graphify-out/
