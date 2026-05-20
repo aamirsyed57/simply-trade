@@ -149,10 +149,12 @@ class BacktestEngine:
                     pos = positions.setdefault(sid, {
                         "qty": Decimal("0"), "avg_price": Decimal("0"),
                         "entry_bar_idx": i, "entry_ts": ts.isoformat(),
+                        "total_entry_cost": Decimal("0"),
                     })
                     total_pos_cost = pos["qty"] * pos["avg_price"] + notional
                     pos["qty"] += qty
                     pos["avg_price"] = total_pos_cost / pos["qty"] if pos["qty"] > 0 else Decimal("0")
+                    pos["total_entry_cost"] = pos.get("total_entry_cost", Decimal("0")) + slippage + commission
                     pos["entry_bar_idx"] = i
                     pos["entry_ts"] = sig.get("entry_ts", ts.isoformat())
 
@@ -162,11 +164,14 @@ class BacktestEngine:
                         continue
                     sell_qty = min(qty, pos["qty"])
                     entry_avg = pos["avg_price"]
-                    realized_pnl = sell_qty * (fill_price_d - entry_avg) - slippage - commission
+                    entry_cost_alloc = pos.get("total_entry_cost", Decimal("0")) * (sell_qty / pos["qty"])
+                    realized_pnl = sell_qty * (fill_price_d - entry_avg) - slippage - commission - entry_cost_alloc
                     cash += float(sell_qty * fill_price_d - slippage - commission)
                     pos["qty"] -= sell_qty
+                    pos["total_entry_cost"] = pos.get("total_entry_cost", Decimal("0")) - entry_cost_alloc
                     if pos["qty"] == 0:
                         pos["avg_price"] = Decimal("0")
+                        pos["total_entry_cost"] = Decimal("0")
 
                     trade_log.append({
                         "symbol_id": sid,
@@ -261,7 +266,8 @@ class BacktestEngine:
                 notional = qty * fill_price_d
                 slippage = notional * Decimal(str(backtest.slippage_bps)) / Decimal("10000")
                 commission = _calc_commission(qty, fill_price_d)
-                realized_pnl = qty * (fill_price_d - pos["avg_price"]) - slippage - commission
+                entry_cost_alloc = pos.get("total_entry_cost", Decimal("0"))
+                realized_pnl = qty * (fill_price_d - pos["avg_price"]) - slippage - commission - entry_cost_alloc
                 cash += float(qty * fill_price_d - slippage - commission)
                 trade_log.append({
                     "symbol_id": sid,

@@ -17,7 +17,7 @@ interface Backtest {
   initial_capital: number; fill_model: string; slippage_bps: number;
   status: string; error_message?: string;
 }
-interface BtResult { metrics: Record<string, number>; per_symbol_metrics: Record<string, Record<string, number>>; }
+interface BtResult { metrics: Record<string, number | null>; per_symbol_metrics: Record<string, Record<string, number>>; }
 interface EquityPoint { ts: string; equity: number; [k: string]: unknown; }
 interface DrawPoint { ts: string; drawdown: number; [k: string]: unknown; }
 interface Trade { symbol_id: number; direction: string; qty: number; entry_price: number; exit_price: number; pnl: number; commission: number; exit_ts: string; }
@@ -64,21 +64,21 @@ function LineChart({ data, valueKey, color, height = 80 }: { data: Record<string
 }
 
 // ── Metric grid ──
-function MetricGrid({ metrics }: { metrics: Record<string, number> }) {
-  const fmtUsd = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+function MetricGrid({ metrics }: { metrics: Record<string, number | null> }) {
+  const fmtUsd = (v: number | null) => v != null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v) : '—';
   const rows: [string, string][] = [
-    ['CAGR', `${metrics.cagr?.toFixed(2)}%`],
-    ['Sharpe', metrics.sharpe?.toFixed(3)],
-    ['Sortino', metrics.sortino?.toFixed(3)],
-    ['Calmar', metrics.calmar?.toFixed(3)],
-    ['Max DD', `${metrics.max_drawdown?.toFixed(2)}%`],
-    ['Win Rate', `${metrics.win_rate?.toFixed(2)}%`],
-    ['Profit Factor', metrics.profit_factor?.toFixed(3)],
+    ['CAGR', `${(metrics.cagr as number)?.toFixed(2)}%`],
+    ['Sharpe', (metrics.sharpe as number)?.toFixed(3)],
+    ['Sortino', (metrics.sortino as number)?.toFixed(3)],
+    ['Calmar', (metrics.calmar as number)?.toFixed(3)],
+    ['Max DD', `${(metrics.max_drawdown as number)?.toFixed(2)}%`],
+    ['Win Rate', `${(metrics.win_rate as number)?.toFixed(2)}%`],
+    ['Profit Factor', metrics.profit_factor != null ? (metrics.profit_factor as number).toFixed(3) : '∞'],
     ['Trades', String(metrics.n_trades)],
-    ['Total PnL', fmtUsd(metrics.total_pnl)],
-    ['Final Equity', fmtUsd(metrics.final_equity)],
-    ['Exposure', `${metrics.exposure_pct?.toFixed(1)}%`],
-    ['Expectancy', `$${metrics.expectancy?.toFixed(2)}`],
+    ['Total PnL', fmtUsd(metrics.total_pnl as number)],
+    ['Final Equity', fmtUsd(metrics.final_equity as number)],
+    ['Exposure', `${(metrics.exposure_pct as number)?.toFixed(1)}%`],
+    ['Expectancy', metrics.expectancy != null ? `$${(metrics.expectancy as number).toFixed(2)}` : '—'],
   ];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>

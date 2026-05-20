@@ -97,7 +97,10 @@ def compute_metrics(
         win_rate = _safe_div(len(winners), len(pnls))
         gross_profit = sum(winners)
         gross_loss = abs(sum(losers)) if losers else 0.0
-        profit_factor = _safe_div(gross_profit, gross_loss)
+        profit_factor = (
+            None if (gross_loss == 0.0 and gross_profit > 0)
+            else _safe_div(gross_profit, gross_loss)
+        )
         avg_winner = _safe_div(sum(winners), len(winners)) if winners else 0.0
         avg_loser = _safe_div(sum(losers), len(losers)) if losers else 0.0
         expectancy = win_rate * avg_winner + (1 - win_rate) * avg_loser
@@ -106,7 +109,8 @@ def compute_metrics(
         total_pnl = sum(pnls)
         n_trades = len(pnls)
     else:
-        win_rate = profit_factor = expectancy = 0.0
+        win_rate = expectancy = 0.0
+        profit_factor = None
         total_pnl = n_trades = 0
 
     # --- Exposure % ---
