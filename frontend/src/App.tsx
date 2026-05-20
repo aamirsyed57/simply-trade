@@ -12,6 +12,7 @@ import { IBKRDashboardPage } from './pages/IBKRDashboardPage';
 import { ExchangeHoursPage } from './pages/ExchangeHoursPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ReconciliationPage } from './pages/ReconciliationPage';
+import { TopMoversPage } from './pages/TopMoversPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/ibkr-orders" element={<IBKROrdersPage />} />
             <Route path="/exchange-hours" element={<ExchangeHoursPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/top-movers" element={<TopMoversPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>

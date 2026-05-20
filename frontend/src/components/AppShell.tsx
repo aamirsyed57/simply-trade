@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe, BarChart2, Settings, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe, BarChart2, Settings, ShieldAlert, Flame } from 'lucide-react';
 import { AccountSummaryBar } from './AccountSummaryBar';
 
 const NAV = [
@@ -12,6 +12,7 @@ const NAV = [
   { to: '/historical', label: 'Historical Data', icon: Database },
   { to: '/logs', label: 'Worker Logs', icon: Terminal },
   { to: '/ibkr-orders', label: 'IBKR Orders', icon: AlertOctagon },
+  { to: '/top-movers', label: 'Top Movers', icon: Flame },
   { to: '/exchange-hours', label: 'Exchange Hours', icon: Globe },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];

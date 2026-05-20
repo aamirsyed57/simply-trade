@@ -242,3 +242,34 @@ export const ibkrFillsApi = {
   list: (mode?: 'paper' | 'live') =>
     request<IBKRFillEntry[]>(`/account/ibkr-fills${mode ? `?mode=${mode}` : ''}`),
 };
+
+export interface MarketInfo {
+  key: string;
+  label: string;
+}
+
+export interface Mover {
+  ticker: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  change_1m: number | null;
+  change_6m: number | null;
+  change_1y: number | null;
+  sparkline: number[];
+  volume: number;
+  market_cap: number | null;
+}
+
+export interface TopMoversResponse {
+  market: string;
+  label: string;
+  gainers: Mover[];
+  losers: Mover[];
+  as_of: string;
+}
+
+export const marketApi = {
+  markets: () => request<MarketInfo[]>('/market/markets'),
+  topMovers: (market: string) => request<TopMoversResponse>(`/market/top-movers?market=${encodeURIComponent(market)}`),
+};
