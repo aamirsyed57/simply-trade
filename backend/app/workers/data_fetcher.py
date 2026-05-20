@@ -43,58 +43,58 @@ async def _do_yfinance_fetch(
     if timeframe not in _YF_INTERVAL:
         raise ValueError(f"Unsupported timeframe '{timeframe}'. Choose from: {list(_YF_INTERVAL)}")
 
+    # Step 1: resolve ticker from DB then close the session before calling yfinance.
+    # Keeping asyncpg connections open while running synchronous yfinance causes a
+    # "Future attached to different loop" error in the executor thread.
     async with AsyncSessionLocal() as session:
         symbol = await session.get(Symbol, symbol_id)
         if symbol is None:
             raise ValueError(f"Symbol {symbol_id} not found")
-
         ticker_str = yf_ticker or symbol.ticker
-        interval = _YF_INTERVAL[timeframe]
 
-        logger.info(f"yfinance fetch: {ticker_str} {interval} {start.date()} → {end.date()}")
+    interval = _YF_INTERVAL[timeframe]
+    logger.info(f"yfinance fetch: {ticker_str} {interval} {start.date()} → {end.date()}")
 
-        # yfinance is synchronous — run in the default executor so we don't block the event loop.
-        loop = asyncio.get_running_loop()
-        df: pd.DataFrame = await loop.run_in_executor(
-            None,
-            lambda: yf.download(
-                ticker_str,
-                start=start.date().isoformat(),
-                end=end.date().isoformat(),
-                interval=interval,
-                auto_adjust=True,
-                progress=False,
-                multi_level_index=False,  # flat columns even for single tickers
-            ),
-        )
+    # Step 2: download synchronously — yfinance is sync and this is a Celery worker,
+    # so blocking the event loop here is fine (nothing else shares it).
+    df: pd.DataFrame = yf.download(
+        ticker_str,
+        start=start.date().isoformat(),
+        end=end.date().isoformat(),
+        interval=interval,
+        auto_adjust=True,
+        progress=False,
+        multi_level_index=False,  # flat columns for single tickers
+    )
 
-        if df.empty:
-            logger.warning(f"yfinance returned no data for {ticker_str}")
-            return 0
+    if df.empty:
+        logger.warning(f"yfinance returned no data for {ticker_str}")
+        return 0
 
-        # Normalise column names (yfinance capitalises them)
-        df.columns = [c.lower() for c in df.columns]
-        df.index = pd.to_datetime(df.index, utc=True)
-        df = df[["open", "high", "low", "close", "volume"]].dropna()
+    df.columns = [c.lower() for c in df.columns]
+    df.index = pd.to_datetime(df.index, utc=True)
+    df = df[["open", "high", "low", "close", "volume"]].dropna()
 
-        records = [
-            {
-                "symbol_id": symbol_id,
-                "timeframe": timeframe,
-                "ts": ts.to_pydatetime(),
-                "open":   Decimal(str(round(float(row["open"]),   6))),
-                "high":   Decimal(str(round(float(row["high"]),   6))),
-                "low":    Decimal(str(round(float(row["low"]),    6))),
-                "close":  Decimal(str(round(float(row["close"]),  6))),
-                "volume": Decimal(str(round(float(row["volume"]), 2))),
-                "source": "yfinance",
-            }
-            for ts, row in df.iterrows()
-        ]
+    records = [
+        {
+            "symbol_id": symbol_id,
+            "timeframe": timeframe,
+            "ts": ts.to_pydatetime(),
+            "open":   Decimal(str(round(float(row["open"]),   6))),
+            "high":   Decimal(str(round(float(row["high"]),   6))),
+            "low":    Decimal(str(round(float(row["low"]),    6))),
+            "close":  Decimal(str(round(float(row["close"]),  6))),
+            "volume": Decimal(str(round(float(row["volume"]), 2))),
+            "source": "yfinance",
+        }
+        for ts, row in df.iterrows()
+    ]
 
-        if not records:
-            return 0
+    if not records:
+        return 0
 
+    # Step 3: upsert in a fresh session (no open connections during the yfinance call above).
+    async with AsyncSessionLocal() as session:
         stmt = (
             pg_insert(HistoricalBar)
             .values(records)
@@ -103,9 +103,9 @@ async def _do_yfinance_fetch(
         result = await session.execute(stmt)
         await session.commit()
 
-        inserted = result.rowcount if result.rowcount >= 0 else len(records)
-        logger.info(f"yfinance: inserted {inserted}/{len(records)} bars for {ticker_str} [{timeframe}]")
-        return inserted
+    inserted = result.rowcount if result.rowcount >= 0 else len(records)
+    logger.info(f"yfinance: inserted {inserted}/{len(records)} bars for {ticker_str} [{timeframe}]")
+    return inserted
 
 
 @celery_app.task(name="app.workers.data_fetcher.prefetch_historical_data")

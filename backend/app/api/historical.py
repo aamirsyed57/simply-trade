@@ -18,6 +18,9 @@ from app.database import get_db
 from app.models.historical_bar import HistoricalBar
 from app.models.symbol import Symbol
 from app.services.market_data_service import MarketDataService
+from celery.result import AsyncResult
+
+from app.workers.celery_app import celery_app
 from app.workers.data_fetcher import fetch_yfinance_data, prefetch_historical_data
 
 logger = logging.getLogger(__name__)
@@ -172,6 +175,18 @@ async def fetch_from_yfinance(req: YFinanceFetchRequest, db: AsyncSession = Depe
         task_id=task.id,
         message=f"yfinance fetch queued for {ticker_label} [{req.timeframe}] {req.start.date()} → {req.end.date()}",
     )
+
+
+@router.get(
+    "/task/{task_id}",
+    summary="Poll a background fetch task",
+)
+async def task_status(task_id: str) -> Any:
+    result = AsyncResult(task_id, app=celery_app)
+    payload = None
+    if result.ready():
+        payload = result.result if not isinstance(result.result, Exception) else {"error": str(result.result)}
+    return {"task_id": task_id, "status": result.status, "result": payload}
 
 
 # ──────────────────────────────────────────────────────────

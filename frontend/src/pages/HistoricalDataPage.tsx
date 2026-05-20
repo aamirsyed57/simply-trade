@@ -1,8 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Upload, Database, Trash2, RefreshCw, FileText, CheckCircle,
-  AlertCircle, ChevronDown, BarChart2, X,
+  AlertCircle, ChevronDown, BarChart2, X, TrendingUp, Calendar,
 } from 'lucide-react';
 import { symbolApi } from '../api/index';
 
@@ -41,12 +41,24 @@ interface UploadResult {
   message: string;
 }
 
+interface FetchTask {
+  task_id: string;
+  status: string;
+  result: { status: string; inserted?: number; message?: string } | null;
+}
+
 const historicalApi = {
   summary: (sid: number) => req<SymbolSummary>(`/historical/summary/${sid}`),
   bars: (sid: number, tf: string, limit = 200) =>
     req<BarRow[]>(`/historical/bars/${sid}?timeframe=${tf}&limit=${limit}`),
   deleteBars: (sid: number, tf?: string) =>
     req<{ deleted: number }>(`/historical/bars/${sid}${tf ? `?timeframe=${tf}` : ''}`, { method: 'DELETE' }),
+  fetchYFinance: (payload: {
+    symbol_id: number; timeframe: string; start: string; end: string; yf_ticker?: string;
+  }) => req<{ task_id: string; message: string }>('/historical/yfinance', {
+    method: 'POST', body: JSON.stringify(payload),
+  }),
+  taskStatus: (taskId: string) => req<FetchTask>(`/historical/task/${taskId}`),
 };
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '1d'];
@@ -239,6 +251,191 @@ function UploadZone({
 }
 
 // ──────────────────────────────────────────────────────────
+// Yahoo Finance fetch panel
+// ──────────────────────────────────────────────────────────
+const YF_LIMITS: Record<string, string> = {
+  '1m': '7-day max', '5m': '60-day max', '15m': '60-day max',
+  '1h': '2-year max', '1d': 'unlimited',
+};
+
+function YFinanceFetchPanel({
+  symbolId, ticker, onSuccess,
+}: { symbolId: number; ticker: string; onSuccess: () => void }) {
+  const today = new Date().toISOString().split('T')[0];
+  const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const [timeframe, setTimeframe] = useState('1d');
+  const [start, setStart] = useState(oneYearAgo);
+  const [end, setEnd] = useState(today);
+  const [yfTicker, setYfTicker] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [pollStatus, setPollStatus] = useState<string | null>(null);
+  const [pollResult, setPollResult] = useState<FetchTask['result']>(null);
+  const [error, setError] = useState('');
+
+  // Poll every 2 s while task is in-flight
+  useEffect(() => {
+    if (!taskId || pollStatus === 'SUCCESS' || pollStatus === 'FAILURE') return;
+    const iv = setInterval(async () => {
+      try {
+        const t = await historicalApi.taskStatus(taskId);
+        setPollStatus(t.status);
+        if (t.result) {
+          setPollResult(t.result);
+          if (t.status === 'SUCCESS') onSuccess();
+        }
+      } catch { /* ignore transient errors */ }
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [taskId, pollStatus, onSuccess]);
+
+  const handleFetch = async () => {
+    setError('');
+    setTaskId(null);
+    setPollStatus(null);
+    setPollResult(null);
+    setLoading(true);
+    try {
+      const res = await historicalApi.fetchYFinance({
+        symbol_id: symbolId,
+        timeframe,
+        start: new Date(start).toISOString(),
+        end: new Date(end + 'T23:59:59Z').toISOString(),
+        yf_ticker: yfTicker.trim() || undefined,
+      });
+      setTaskId(res.task_id);
+      setPollStatus('PENDING');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isRunning = pollStatus === 'PENDING' || pollStatus === 'STARTED';
+  const isDone = pollStatus === 'SUCCESS' || pollStatus === 'FAILURE';
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      {/* Timeframe */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, minWidth: 76 }}>Timeframe:</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {TIMEFRAMES.map(tf => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              title={YF_LIMITS[tf]}
+              style={{
+                padding: '4px 10px', borderRadius: 5, fontSize: 12, cursor: 'pointer',
+                background: timeframe === tf ? 'var(--accent)' : 'var(--bg-primary)',
+                color: timeframe === tf ? '#fff' : 'var(--text-muted)',
+                border: `1px solid ${timeframe === tf ? 'var(--accent)' : 'var(--border)'}`,
+                fontWeight: timeframe === tf ? 600 : 400, transition: 'all 0.15s',
+              }}
+            >{tf}</button>
+          ))}
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center', marginLeft: 4 }}>
+            {YF_LIMITS[timeframe]}
+          </span>
+        </div>
+      </div>
+
+      {/* Date range */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+            <Calendar size={10} style={{ marginRight: 4, verticalAlign: 'middle' }} />Start
+          </label>
+          <input type="date" style={inp} value={start} max={end}
+            onChange={e => setStart(e.target.value)} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+            <Calendar size={10} style={{ marginRight: 4, verticalAlign: 'middle' }} />End
+          </label>
+          <input type="date" style={inp} value={end} min={start} max={today}
+            onChange={e => setEnd(e.target.value)} />
+        </div>
+      </div>
+
+      {/* Advanced (yf_ticker override) */}
+      <button
+        onClick={() => setShowAdvanced(v => !v)}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}
+      >
+        <ChevronDown size={12} style={{ transform: showAdvanced ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+        Advanced options
+      </button>
+      {showAdvanced && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+            Yahoo Finance ticker override
+          </label>
+          <input
+            style={{ ...inp, maxWidth: 200 }}
+            placeholder={`default: ${ticker}`}
+            value={yfTicker}
+            onChange={e => setYfTicker(e.target.value)}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            Use when the Yahoo ticker differs — e.g. <code>VOD.L</code>, <code>SAP.DE</code>
+          </div>
+        </div>
+      )}
+
+      {/* Fetch button */}
+      <button
+        onClick={handleFetch}
+        disabled={loading || isRunning}
+        style={{
+          padding: '8px 18px', background: loading || isRunning ? 'var(--bg-surface)' : '#16a34a',
+          border: 'none', borderRadius: 7, color: loading || isRunning ? 'var(--text-muted)' : '#fff',
+          fontSize: 13, fontWeight: 600, cursor: loading || isRunning ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+        }}
+      >
+        <TrendingUp size={14} />
+        {loading ? 'Queuing…' : isRunning ? 'Fetching from Yahoo…' : 'Fetch from Yahoo Finance'}
+      </button>
+
+      {/* Status */}
+      {isRunning && (
+        <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(79,125,243,0.08)', border: '1px solid rgba(79,125,243,0.2)', borderRadius: 7, fontSize: 13, color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <RefreshCw size={14} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+          Downloading bars… task <code style={{ fontSize: 11 }}>{taskId?.slice(0, 8)}</code>
+        </div>
+      )}
+      {isDone && pollResult && pollStatus === 'SUCCESS' && (
+        <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 7, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <CheckCircle size={16} color="#22c55e" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: 600, color: '#22c55e' }}>Done</div>
+            <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>
+              {pollResult.inserted ?? 0} bars inserted
+            </div>
+          </div>
+        </div>
+      )}
+      {isDone && pollStatus === 'FAILURE' && (
+        <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 7, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13, color: '#ef4444' }}>Fetch failed. Check worker logs for details.</div>
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 7, display: 'flex', gap: 8 }}>
+          <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13, color: '#ef4444' }}>{error}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
 // Symbol data card
 // ──────────────────────────────────────────────────────────
 function SymbolCard({ symbolId, ticker }: { symbolId: number; ticker: string }) {
@@ -367,6 +564,17 @@ function SymbolCard({ symbolId, ticker }: { symbolId: number; ticker: string }) 
               Import CSV Data
             </div>
             <UploadZone symbolId={symbolId} ticker={ticker} onSuccess={() => refetchSummary()} />
+          </div>
+
+          {/* Yahoo Finance fetch */}
+          <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <TrendingUp size={13} color="#16a34a" />
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Fetch from Yahoo Finance
+              </span>
+            </div>
+            <YFinanceFetchPanel symbolId={symbolId} ticker={ticker} onSuccess={() => refetchSummary()} />
           </div>
         </div>
       )}
@@ -531,10 +739,10 @@ export function HistoricalDataPage() {
       <div style={{ padding: '12px 16px', background: 'rgba(79,125,243,0.08)', border: '1px solid rgba(79,125,243,0.2)', borderRadius: 8, marginBottom: 20, fontSize: 13, color: 'var(--text-muted)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <FileText size={16} color="var(--accent)" style={{ flexShrink: 0, marginTop: 1 }} />
         <span>
-          Import CSV files to populate historical bars for use in backtests.
-          Supported formats: <strong style={{ color: 'var(--text-primary)' }}>Yahoo Finance</strong>,
-          <strong style={{ color: 'var(--text-primary)' }}> Alpha Vantage</strong>, and any CSV with
-          <code style={{ background: 'var(--bg-primary)', padding: '1px 5px', borderRadius: 3, marginLeft: 3 }}>ts, open, high, low, close, volume</code> columns.
+          Populate historical bars for backtesting via{' '}
+          <strong style={{ color: '#16a34a' }}>Yahoo Finance fetch</strong> (automatic, date-range picker) or{' '}
+          <strong style={{ color: 'var(--text-primary)' }}>CSV upload</strong> (Yahoo Finance, Alpha Vantage, and
+          any <code style={{ background: 'var(--bg-primary)', padding: '1px 5px', borderRadius: 3 }}>ts, open, high, low, close, volume</code> format).
         </span>
       </div>
 
