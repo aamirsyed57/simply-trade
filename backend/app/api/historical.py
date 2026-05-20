@@ -18,7 +18,7 @@ from app.database import get_db
 from app.models.historical_bar import HistoricalBar
 from app.models.symbol import Symbol
 from app.services.market_data_service import MarketDataService
-from app.workers.data_fetcher import prefetch_historical_data
+from app.workers.data_fetcher import fetch_yfinance_data, prefetch_historical_data
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,14 @@ class PrefetchRequest(BaseModel):
     timeframe: str
     start: datetime
     end: datetime
+
+
+class YFinanceFetchRequest(BaseModel):
+    symbol_id: int
+    timeframe: str = "1d"
+    start: datetime
+    end: datetime
+    yf_ticker: str | None = None  # override when Yahoo ticker differs from stored ticker (e.g. "VOD.L")
 
 
 class PrefetchResponse(BaseModel):
@@ -133,6 +141,37 @@ async def prefetch_data(req: PrefetchRequest):
         "task_id": task.id,
         "message": f"Prefetch task queued for symbol {req.symbol_id} ({req.timeframe})",
     }
+
+
+@router.post(
+    "/yfinance",
+    response_model=PrefetchResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Fetch historical bars from Yahoo Finance (background task)",
+    description=(
+        "Queues a Celery task that downloads OHLCV bars from Yahoo Finance and upserts them into "
+        "the DB. Returns immediately with a `task_id` you can poll. "
+        "Set `yf_ticker` when the Yahoo Finance ticker differs from the stored one "
+        "(e.g. `VOD.L` for LSE-listed Vodafone). "
+        "**yfinance data limits by timeframe:** 1m → 7 days, 5m/15m → 60 days, 1h → 730 days, 1d → unlimited."
+    ),
+)
+async def fetch_from_yfinance(req: YFinanceFetchRequest, db: AsyncSession = Depends(get_db)) -> Any:
+    sym = await db.get(Symbol, req.symbol_id)
+    if sym is None:
+        raise HTTPException(status_code=404, detail=f"Symbol {req.symbol_id} not found")
+    task = fetch_yfinance_data.delay(
+        symbol_id=req.symbol_id,
+        timeframe=req.timeframe,
+        start=req.start.isoformat(),
+        end=req.end.isoformat(),
+        yf_ticker=req.yf_ticker,
+    )
+    ticker_label = req.yf_ticker or sym.ticker
+    return PrefetchResponse(
+        task_id=task.id,
+        message=f"yfinance fetch queued for {ticker_label} [{req.timeframe}] {req.start.date()} → {req.end.date()}",
+    )
 
 
 # ──────────────────────────────────────────────────────────
