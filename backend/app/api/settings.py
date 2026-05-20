@@ -42,7 +42,12 @@ async def update_settings(settings: NotificationSettings):
     from app.services.notification_service import notifier
     app_settings.TELEGRAM_BOT_TOKEN = settings.telegram_bot_token
     app_settings.TELEGRAM_CHAT_ID = settings.telegram_chat_id
-    notifier.bot_token = settings.telegram_bot_token
+    
+    clean_token = settings.telegram_bot_token
+    if clean_token and clean_token.lower().startswith("bot"):
+        clean_token = clean_token[3:]
+        
+    notifier.bot_token = clean_token
     notifier.chat_id = settings.telegram_chat_id
     notifier.base_url = f"https://api.telegram.org/bot{notifier.bot_token}/sendMessage"
     
@@ -51,6 +56,8 @@ async def update_settings(settings: NotificationSettings):
 @router.post("/test-notification")
 async def test_notification():
     from app.services.notification_service import notifier
+    if not notifier.bot_token or not notifier.chat_id:
+        return {"status": "error", "message": "Telegram Bot Token or Chat ID is not configured."}
     try:
         await notifier.send("test", "🔔 This is a test notification from AutoTrader!")
         return {"status": "success", "message": "Test notification sent successfully."}

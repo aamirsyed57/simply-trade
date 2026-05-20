@@ -42,8 +42,11 @@ class Order(Base, TimestampMixin):
     # Our internal order ID (UUID stored as string for IBKR compatibility)
     client_order_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
 
-    # IBKR-assigned order ID (set after submission)
+    # IBKR-assigned order ID (set after submission, volatile per session)
     ibkr_order_id: Mapped[int | None] = mapped_column(nullable=True)
+
+    # IBKR Permanent ID (globally unique across sessions)
+    ibkr_perm_id: Mapped[int | None] = mapped_column(nullable=True)
 
     # Non-negotiable: every order must have a portfolio_id (§4.2)
     portfolio_id: Mapped[int] = mapped_column(

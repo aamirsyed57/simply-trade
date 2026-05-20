@@ -132,6 +132,7 @@ class BridgeService:
         else:
             order_data = json.dumps({
                 "ibkr_order_id": ibkr_order_id,
+                "ibkr_perm_id": trade.order.permId,
                 "order_ref": trade.order.orderRef or "",
                 "ticker": trade.contract.symbol,
                 "exchange": trade.contract.exchange,
@@ -154,6 +155,7 @@ class BridgeService:
             event = OrderStatusEvent(
                 order_ref=trade.order.orderRef,
                 ibkr_order_id=trade.order.orderId,
+                ibkr_perm_id=trade.order.permId,
                 status=trade.orderStatus.status,
                 filled=float(trade.orderStatus.filled),
                 remaining=float(trade.orderStatus.remaining),
@@ -167,6 +169,7 @@ class BridgeService:
         event = OrderStatusEvent(
             order_ref=trade.order.orderRef or "",
             ibkr_order_id=trade.order.orderId,
+            ibkr_perm_id=trade.order.permId,
             status=trade.orderStatus.status,
             filled=float(trade.orderStatus.filled),
             remaining=float(trade.orderStatus.remaining),
@@ -185,6 +188,7 @@ class BridgeService:
         event = OrderStatusEvent(
             order_ref=trade.order.orderRef,
             ibkr_order_id=trade.order.orderId,
+            ibkr_perm_id=trade.order.permId,
             status=trade.orderStatus.status,
             filled=float(trade.orderStatus.filled),
             remaining=float(trade.orderStatus.remaining),

@@ -120,6 +120,7 @@ async def _upsert_from_hash_entry(db: AsyncSession, entry: dict, now: datetime) 
         pg_insert(IBKROrder)
         .values(
             ibkr_order_id=ibkr_id,
+            ibkr_perm_id=entry.get("ibkr_perm_id"),
             order_ref=entry.get("order_ref", ""),
             ticker=entry.get("ticker", ""),
             exchange=entry.get("exchange", ""),
@@ -138,6 +139,7 @@ async def _upsert_from_hash_entry(db: AsyncSession, entry: dict, now: datetime) 
         .on_conflict_do_update(
             index_elements=["ibkr_order_id"],
             set_={
+                "ibkr_perm_id":     entry.get("ibkr_perm_id"),
                 "order_ref":        entry.get("order_ref", ""),
                 "ticker":           entry.get("ticker", ""),
                 "exchange":         entry.get("exchange", ""),

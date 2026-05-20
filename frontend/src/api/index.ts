@@ -125,6 +125,7 @@ export interface Order {
   id: number;
   client_order_id: string;
   ibkr_order_id: number | null;
+  ibkr_perm_id: number | null;
   portfolio_id: number;
   symbol_id: number;
   strategy_code: string;
@@ -179,6 +180,7 @@ export const positionApi = {
 
 export interface IBKROrderEntry {
   ibkr_order_id: number;
+  ibkr_perm_id: number | null;
   order_ref: string;
   ticker: string;
   exchange: string;
