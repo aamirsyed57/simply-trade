@@ -68,6 +68,100 @@ MARKETS: dict[str, dict[str, Any]] = {
             "MNG.L", "BA.L", "HIK.L", "JD.L", "SDR.L", "AUTO.L",
         ],
     },
+    # ── European ──────────────────────────────────────────────────────────
+    "cac40": {
+        "label": "CAC 40",
+        "tickers": [
+            "MC.PA", "TTE.PA", "SAN.PA", "OR.PA", "BNP.PA", "AI.PA",
+            "SU.PA", "ENGI.PA", "DG.PA", "ORA.PA", "RI.PA", "KER.PA",
+            "CAP.PA", "ML.PA", "PUB.PA", "SGO.PA", "LR.PA", "RNO.PA",
+            "GLE.PA", "BN.PA", "VIE.PA", "HO.PA", "ATO.PA", "EL.PA",
+        ],
+    },
+    "ibex35": {
+        "label": "IBEX 35",
+        "tickers": [
+            "SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "TEF.MC", "REP.MC",
+            "AMS.MC", "FER.MC", "ACS.MC", "CABK.MC", "BKT.MC", "ELE.MC",
+            "MAP.MC", "GRF.MC", "ACX.MC", "MTS.MC", "NTGY.MC", "CLNX.MC",
+            "COL.MC", "AENA.MC",
+        ],
+    },
+    "smi": {
+        "label": "SMI (Switzerland)",
+        "tickers": [
+            "NESN.SW", "NOVN.SW", "ROG.SW", "UBSG.SW", "ABBN.SW",
+            "ZURN.SW", "LONN.SW", "GIVN.SW", "SREN.SW", "ALC.SW",
+            "CFR.SW", "SLHN.SW", "SCMN.SW", "GEBN.SW", "HOLN.SW",
+            "PGHN.SW", "SIKA.SW", "SGKN.SW",
+        ],
+    },
+    "ftse_mib": {
+        "label": "FTSE MIB (Italy)",
+        "tickers": [
+            "ENI.MI", "ENEL.MI", "ISP.MI", "UCG.MI", "STM.MI", "G.MI",
+            "RACE.MI", "MONC.MI", "PRY.MI", "TRN.MI", "REC.MI", "BAMI.MI",
+            "MB.MI", "A2A.MI", "NEXI.MI", "LDO.MI", "PIRC.MI", "FCA.MI",
+            "AZM.MI", "CPR.MI",
+        ],
+    },
+    "aex": {
+        "label": "AEX (Netherlands)",
+        "tickers": [
+            "ASML.AS", "HEIA.AS", "PHIA.AS", "NN.AS", "WKL.AS",
+            "ADYEN.AS", "INGA.AS", "REN.AS", "AKZA.AS", "MT.AS",
+            "ABN.AS", "KPN.AS", "AGN.AS", "LIGHT.AS", "RAND.AS",
+            "UMG.AS", "BESI.AS", "IMCD.AS",
+        ],
+    },
+    # ── Asian ─────────────────────────────────────────────────────────────
+    "nikkei": {
+        "label": "Nikkei 225 (Japan)",
+        "tickers": [
+            "7203.T", "6758.T", "6861.T", "9984.T", "8306.T", "6902.T",
+            "8316.T", "8035.T", "4519.T", "9432.T", "7974.T", "4568.T",
+            "6098.T", "4063.T", "9433.T", "8411.T", "7267.T", "6501.T",
+            "4502.T", "8766.T", "7751.T", "6367.T", "4661.T", "9022.T",
+        ],
+    },
+    "hangseng": {
+        "label": "Hang Seng (Hong Kong)",
+        "tickers": [
+            "0700.HK", "9988.HK", "1299.HK", "0005.HK", "0941.HK",
+            "2318.HK", "1398.HK", "3690.HK", "0388.HK", "2020.HK",
+            "0016.HK", "0883.HK", "0011.HK", "9999.HK", "1024.HK",
+            "0175.HK", "1810.HK", "2269.HK", "6098.HK", "0267.HK",
+        ],
+    },
+    "nifty50": {
+        "label": "Nifty 50 (India)",
+        "tickers": [
+            "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+            "HINDUNILVR.NS", "BAJFINANCE.NS", "SBIN.NS", "LT.NS", "WIPRO.NS",
+            "HCLTECH.NS", "ASIANPAINT.NS", "KOTAKBANK.NS", "AXISBANK.NS",
+            "MARUTI.NS", "ITC.NS", "SUNPHARMA.NS", "TITAN.NS",
+            "ULTRACEMCO.NS", "NESTLEIND.NS", "POWERGRID.NS", "NTPC.NS",
+            "BHARTIARTL.NS", "DIVISLAB.NS",
+        ],
+    },
+    "asx200": {
+        "label": "ASX 200 (Australia)",
+        "tickers": [
+            "BHP.AX", "CBA.AX", "CSL.AX", "NAB.AX", "WBC.AX", "ANZ.AX",
+            "WES.AX", "RIO.AX", "WOW.AX", "MQG.AX", "TLS.AX", "FMG.AX",
+            "ALL.AX", "COL.AX", "GMG.AX", "S32.AX", "WDS.AX", "TCL.AX",
+            "STO.AX", "MIN.AX", "QBE.AX", "APA.AX",
+        ],
+    },
+    "kospi": {
+        "label": "KOSPI (South Korea)",
+        "tickers": [
+            "005930.KS", "000660.KS", "035420.KS", "005380.KS", "051910.KS",
+            "006400.KS", "003550.KS", "035720.KS", "068270.KS", "207940.KS",
+            "000270.KS", "105560.KS", "055550.KS", "086790.KS", "034730.KS",
+            "017670.KS", "030200.KS", "096770.KS", "012330.KS", "028260.KS",
+        ],
+    },
 }
 
 # Approximate trading days for each lookback window
