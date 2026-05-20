@@ -246,6 +246,7 @@ export const ibkrFillsApi = {
 export interface MarketInfo {
   key: string;
   label: string;
+  region: string;
 }
 
 export interface Mover {

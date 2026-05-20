@@ -16,6 +16,7 @@ router = APIRouter(prefix="/market", tags=["market"])
 MARKETS: dict[str, dict[str, Any]] = {
     "dow30": {
         "label": "Dow Jones 30",
+        "region": "United States",
         "tickers": [
             "AAPL", "AMGN", "AXP", "BA", "CAT", "CRM", "CSCO", "CVX",
             "DIS", "DOW", "GS", "HD", "HON", "IBM", "JNJ", "JPM",
@@ -25,6 +26,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "nasdaq100": {
         "label": "NASDAQ 100",
+        "region": "United States",
         "tickers": [
             "AAPL", "MSFT", "AMZN", "NVDA", "META", "GOOGL", "TSLA",
             "AVGO", "COST", "NFLX", "AMD", "ADBE", "CSCO", "QCOM",
@@ -37,6 +39,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "sp500": {
         "label": "S&P 500 (Top 50)",
+        "region": "United States",
         "tickers": [
             "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "META", "BRK-B",
             "LLY", "TSLA", "AVGO", "JPM", "UNH", "V", "XOM", "MA",
@@ -49,6 +52,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "dax": {
         "label": "DAX 40",
+        "region": "Europe",
         "tickers": [
             "ADS.DE", "AIR.DE", "ALV.DE", "BAS.DE", "BAYN.DE", "BMW.DE",
             "BNR.DE", "1COV.DE", "DB1.DE", "DBK.DE", "DHL.DE", "DTE.DE",
@@ -60,6 +64,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "ftse100": {
         "label": "FTSE 100",
+        "region": "Europe",
         "tickers": [
             "HSBA.L", "BP.L", "SHEL.L", "AZN.L", "ULVR.L", "RIO.L",
             "GSK.L", "DGE.L", "BATS.L", "LLOY.L", "VOD.L", "BARC.L",
@@ -71,6 +76,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     # ── European ──────────────────────────────────────────────────────────
     "cac40": {
         "label": "CAC 40",
+        "region": "Europe",
         "tickers": [
             "MC.PA", "TTE.PA", "SAN.PA", "OR.PA", "BNP.PA", "AI.PA",
             "SU.PA", "ENGI.PA", "DG.PA", "ORA.PA", "RI.PA", "KER.PA",
@@ -80,6 +86,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "ibex35": {
         "label": "IBEX 35",
+        "region": "Europe",
         "tickers": [
             "SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "TEF.MC", "REP.MC",
             "AMS.MC", "FER.MC", "ACS.MC", "CABK.MC", "BKT.MC", "ELE.MC",
@@ -89,6 +96,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "smi": {
         "label": "SMI (Switzerland)",
+        "region": "Europe",
         "tickers": [
             "NESN.SW", "NOVN.SW", "ROG.SW", "UBSG.SW", "ABBN.SW",
             "ZURN.SW", "LONN.SW", "GIVN.SW", "SREN.SW", "ALC.SW",
@@ -98,6 +106,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "ftse_mib": {
         "label": "FTSE MIB (Italy)",
+        "region": "Europe",
         "tickers": [
             "ENI.MI", "ENEL.MI", "ISP.MI", "UCG.MI", "STM.MI", "G.MI",
             "RACE.MI", "MONC.MI", "PRY.MI", "TRN.MI", "REC.MI", "BAMI.MI",
@@ -107,6 +116,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "aex": {
         "label": "AEX (Netherlands)",
+        "region": "Europe",
         "tickers": [
             "ASML.AS", "HEIA.AS", "PHIA.AS", "NN.AS", "WKL.AS",
             "ADYEN.AS", "INGA.AS", "REN.AS", "AKZA.AS", "MT.AS",
@@ -117,6 +127,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     # ── Asian ─────────────────────────────────────────────────────────────
     "nikkei": {
         "label": "Nikkei 225 (Japan)",
+        "region": "Asia-Pacific",
         "tickers": [
             "7203.T", "6758.T", "6861.T", "9984.T", "8306.T", "6902.T",
             "8316.T", "8035.T", "4519.T", "9432.T", "7974.T", "4568.T",
@@ -126,6 +137,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "hangseng": {
         "label": "Hang Seng (Hong Kong)",
+        "region": "Asia-Pacific",
         "tickers": [
             "0700.HK", "9988.HK", "1299.HK", "0005.HK", "0941.HK",
             "2318.HK", "1398.HK", "3690.HK", "0388.HK", "2020.HK",
@@ -135,6 +147,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "nifty50": {
         "label": "Nifty 50 (India)",
+        "region": "Asia-Pacific",
         "tickers": [
             "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
             "HINDUNILVR.NS", "BAJFINANCE.NS", "SBIN.NS", "LT.NS", "WIPRO.NS",
@@ -146,6 +159,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "asx200": {
         "label": "ASX 200 (Australia)",
+        "region": "Asia-Pacific",
         "tickers": [
             "BHP.AX", "CBA.AX", "CSL.AX", "NAB.AX", "WBC.AX", "ANZ.AX",
             "WES.AX", "RIO.AX", "WOW.AX", "MQG.AX", "TLS.AX", "FMG.AX",
@@ -155,6 +169,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "kospi": {
         "label": "KOSPI (South Korea)",
+        "region": "Asia-Pacific",
         "tickers": [
             "005930.KS", "000660.KS", "035420.KS", "005380.KS", "051910.KS",
             "006400.KS", "003550.KS", "035720.KS", "068270.KS", "207940.KS",
@@ -198,6 +213,7 @@ class TopMoversResponse(BaseModel):
 class MarketInfo(BaseModel):
     key: str
     label: str
+    region: str
 
 
 def _safe_float(val: Any) -> float | None:
@@ -343,7 +359,7 @@ def _fetch_movers(market_key: str) -> TopMoversResponse:
 
 @router.get("/markets", response_model=list[MarketInfo], summary="List available markets")
 async def list_markets() -> list[MarketInfo]:
-    return [MarketInfo(key=k, label=v["label"]) for k, v in MARKETS.items()]
+    return [MarketInfo(key=k, label=v["label"], region=v["region"]) for k, v in MARKETS.items()]
 
 
 @router.get("/top-movers", response_model=TopMoversResponse, summary="Top gainers and losers for a market")

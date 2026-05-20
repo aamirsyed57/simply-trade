@@ -248,13 +248,24 @@ export function TopMoversPage() {
             fontWeight: 600,
             cursor: 'pointer',
             outline: 'none',
-            minWidth: 180,
+            minWidth: 200,
           }}
         >
           {markets.length === 0 ? (
             <option value="sp500">S&amp;P 500 (Top 50)</option>
           ) : (
-            markets.map(m => <option key={m.key} value={m.key}>{m.label}</option>)
+            Object.entries(
+              markets.reduce<Record<string, typeof markets>>((acc, m) => {
+                (acc[m.region] ??= []).push(m);
+                return acc;
+              }, {})
+            ).map(([region, items]) => (
+              <optgroup key={region} label={region}>
+                {items.map(m => (
+                  <option key={m.key} value={m.key}>{m.label}</option>
+                ))}
+              </optgroup>
+            ))
           )}
         </select>
 
