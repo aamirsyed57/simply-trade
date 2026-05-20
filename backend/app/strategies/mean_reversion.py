@@ -27,10 +27,11 @@ class MeanReversionStrategy(BaseStrategy):
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:
         now = ctx.clock.now()
-        start = now - timedelta(days=5)
-        
-        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
         periods = self.params.lookback_periods
+        # Ensure enough calendar days to cover `periods` bars on any timeframe
+        start = now - timedelta(days=periods + 10)
+
+        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
         
         if len(df) < periods:
             return None

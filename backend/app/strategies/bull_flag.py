@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class BullFlagParams(BaseModel):
     consolidation_periods: int = Field(default=5, description="Number of bars for consolidation")
+    consolidation_tightness_percent: float = Field(default=3.0, description="Max high-low range % across consolidation bars")
     breakout_threshold_percent: float = Field(default=0.5, description="Percent above local high to trigger breakout")
     position_size: float = Field(default=10.0, description="Number of shares to buy")
 
@@ -27,26 +28,28 @@ class BullFlagStrategy(BaseStrategy):
 
     async def generate_signal(self, symbol_id: int, ctx: ExecutionContext) -> Signal | None:
         now = ctx.clock.now()
-        start = now - timedelta(days=2)
-        
-        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
         periods = self.params.consolidation_periods
-        
+        # Ensure enough calendar days to cover `periods` bars on any timeframe
+        start = now - timedelta(days=max(14, periods * 3))
+
+        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
+
         if len(df) < periods + 1:
             return None
-            
-        recent_bars = df.iloc[-periods:]
-        local_high = recent_bars['high'].max()
-        local_low = recent_bars['low'].min()
-        
-        # Check if consolidation is tight (high-low < 1%)
+
+        # Consolidation is the last N bars BEFORE the current bar
+        consolidation = df.iloc[-(periods + 1):-1]
+        curr_price = df.iloc[-1]['close']
+
+        local_high = consolidation['high'].max()
+        local_low = consolidation['low'].min()
+
         if local_low <= 0:
             return None
         tightness = ((local_high - local_low) / local_low) * 100
-        if tightness > 1.0:
+        if tightness > self.params.consolidation_tightness_percent:
             return None
-            
-        curr_price = df.iloc[-1]['close']
+
         breakout_price = local_high * (1 + (self.params.breakout_threshold_percent / 100.0))
         
         if curr_price > breakout_price:

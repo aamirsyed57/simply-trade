@@ -125,7 +125,7 @@ def compute_metrics(
         "calmar": round(calmar, 4),
         "max_drawdown": round(max_dd * 100, 4),   # %
         "win_rate": round(win_rate * 100, 4),      # %
-        "profit_factor": round(profit_factor, 4),
+        "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
         "expectancy": round(expectancy, 4),
         "total_pnl": round(total_pnl, 4),
         "n_trades": n_trades,
