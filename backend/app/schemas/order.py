@@ -37,6 +37,7 @@ class OrderRead(APIModel):
     id: int
     client_order_id: str
     ibkr_order_id: int | None
+    ibkr_perm_id: int | None
     portfolio_id: int
     symbol_id: int
     strategy_code: str

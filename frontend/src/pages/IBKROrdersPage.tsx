@@ -225,7 +225,7 @@ export function IBKROrdersPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-                {['IBKR ID', 'Ticker', 'Side', 'Qty', 'Type', 'Limit', 'Status', 'Filled', 'Avg Price', 'Mode', 'Order Ref', 'Source', 'First Seen', 'Updated'].map(h => (
+                {['Perm ID (API ID)', 'Ticker', 'Side', 'Qty', 'Type', 'Limit', 'Status', 'Filled', 'Avg Price', 'Mode', 'Order Ref', 'Source', 'First Seen', 'Updated'].map(h => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -241,8 +241,10 @@ export function IBKROrdersPage() {
                       : i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-surface)',
                 }}>
                   <td style={td}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{o.ibkr_order_id}</span>
-                    <LiveDot live={o.is_live} />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{o.ibkr_perm_id ?? '—'}</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{o.ibkr_order_id} <LiveDot live={o.is_live} /></span>
+                    </div>
                   </td>
                   <td style={td}>
                     <span style={{ fontWeight: 600 }}>{o.ticker}</span>

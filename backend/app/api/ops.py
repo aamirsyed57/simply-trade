@@ -81,6 +81,8 @@ async def ibkr_status():
     summary="Emergency kill switch — halt all live trading",
 )
 async def kill_switch():
+    from app.services.notification_service import notifier
+    
     r = redis.from_url(settings.REDIS_URL, decode_responses=True)
     event = EmergencyEvent(action="cancel_all")
     await r.publish(CHANNEL_EMERGENCY, event.model_dump_json())
@@ -89,6 +91,11 @@ async def kill_switch():
     await r.set("ops:live_trading_enabled", "false")
     await r.aclose()
     
+    try:
+        await notifier.send("kill_switch", "EMERGENCY: Kill switch activated. Sent cancel_all to bridge. Trading disabled.")
+    except Exception:
+        pass
+        
     return {
         "live_trading_enabled": False,
         "message": "Kill switch activated. Sent cancel_all to bridge.",
@@ -113,6 +120,7 @@ async def _upsert_from_hash_entry(db: AsyncSession, entry: dict, now: datetime) 
         pg_insert(IBKROrder)
         .values(
             ibkr_order_id=ibkr_id,
+            ibkr_perm_id=entry.get("ibkr_perm_id"),
             order_ref=entry.get("order_ref", ""),
             ticker=entry.get("ticker", ""),
             exchange=entry.get("exchange", ""),
@@ -131,6 +139,7 @@ async def _upsert_from_hash_entry(db: AsyncSession, entry: dict, now: datetime) 
         .on_conflict_do_update(
             index_elements=["ibkr_order_id"],
             set_={
+                "ibkr_perm_id":     entry.get("ibkr_perm_id"),
                 "order_ref":        entry.get("order_ref", ""),
                 "ticker":           entry.get("ticker", ""),
                 "exchange":         entry.get("exchange", ""),

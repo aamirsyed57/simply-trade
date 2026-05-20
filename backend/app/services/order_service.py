@@ -14,6 +14,7 @@ from app.models.order import Order, OrderSide, OrderStatus, OrderType
 from app.models.portfolio import Portfolio
 from app.models.position import VirtualPosition
 from app.strategies.signals import Signal
+from app.services.notification_service import notifier
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,15 @@ class OrderManager:
 
         await self.db.flush()
         logger.info(f"Processed fill: order_ref={order_ref}, qty={qty}, price={price}")
+        
+        try:
+            await notifier.send(
+                "fill", 
+                f"Order Filled:\nRef: {order_ref}\nSymbol ID: {order.symbol_id}\nSide: {order.side.value}\nQty: {qty}\nPrice: {price}\nPortfolio ID: {order.portfolio_id}"
+            )
+        except Exception as e:
+            logger.error(f"Error sending fill notification: {e}")
+
         return fill
 
     # IBKR status strings → our OrderStatus
@@ -186,6 +196,7 @@ class OrderManager:
         order_ref: str,
         ibkr_order_id: int,
         status: str,
+        ibkr_perm_id: int | None = None,
     ) -> Order | None:
         """
         Update Order.ibkr_order_id and status from an IBKR OrderStatus event.
@@ -208,6 +219,9 @@ class OrderManager:
 
         if order.ibkr_order_id is None:
             order.ibkr_order_id = ibkr_order_id
+            
+        if ibkr_perm_id is not None:
+            order.ibkr_perm_id = ibkr_perm_id
 
         new_status = self._IBKR_STATUS_MAP.get(status)
         if new_status:

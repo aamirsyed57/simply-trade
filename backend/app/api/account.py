@@ -111,6 +111,7 @@ async def get_ibkr_account():
 
 class IBKROrderEntry(BaseModel):
     ibkr_order_id: int
+    ibkr_perm_id: int | None
     order_ref: str
     ticker: str
     exchange: str
@@ -176,6 +177,7 @@ async def get_ibkr_orders(db: AsyncSession = Depends(get_db)):
     ibkr_orders = [
         IBKROrderEntry(
             ibkr_order_id=row.ibkr_order_id,
+            ibkr_perm_id=row.ibkr_perm_id,
             order_ref=row.order_ref,
             ticker=row.ticker,
             exchange=row.exchange,

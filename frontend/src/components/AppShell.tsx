@@ -1,17 +1,19 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, Library, TrendingUp, Activity, Database, Terminal, AlertOctagon, Globe, BarChart2, Settings, ShieldAlert } from 'lucide-react';
 import { AccountSummaryBar } from './AccountSummaryBar';
 
 const NAV = [
-  { to: '/', label: 'Portfolios', icon: LayoutDashboard },
-  { to: '/ibkr-dashboard', label: 'IBKR Dashboard', icon: BarChart2 },
+  { to: '/', label: 'IBKR Dashboard', icon: BarChart2 },
+  { to: '/portfolios', label: 'Portfolios', icon: LayoutDashboard },
+  { to: '/reconciliation', label: 'Reconciliation', icon: ShieldAlert },
   { to: '/strategies', label: 'Strategies', icon: Library },
   { to: '/backtests', label: 'Backtests', icon: TrendingUp },
   { to: '/historical', label: 'Historical Data', icon: Database },
   { to: '/logs', label: 'Worker Logs', icon: Terminal },
   { to: '/ibkr-orders', label: 'IBKR Orders', icon: AlertOctagon },
   { to: '/exchange-hours', label: 'Exchange Hours', icon: Globe },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

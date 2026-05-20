@@ -13,6 +13,7 @@ class IBKROrder(Base):
     __tablename__ = "ibkr_orders"
 
     ibkr_order_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    ibkr_perm_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     order_ref: Mapped[str] = mapped_column(String, nullable=False, default="")
     ticker: Mapped[str] = mapped_column(String, nullable=False)
     exchange: Mapped[str] = mapped_column(String, nullable=False)
