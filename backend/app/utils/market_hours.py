@@ -66,25 +66,43 @@ def is_market_hours(exchange: str = "NYSE") -> bool:
     return spec.open <= t < spec.close
 
 
-# Extended pre-market / after-hours windows — US exchanges only for now.
-# Used by the manual trade guard so traders can submit during extended sessions.
+# Extended pre-market / after-hours windows per exchange.
+# Used by is_trading_session() and the manual trade guard.
 _EXTENDED: dict[str, tuple[time, time]] = {
-    "NYSE":   (time(4, 0), time(20, 0)),
-    "NASDAQ": (time(4, 0), time(20, 0)),
-    "ARCA":   (time(4, 0), time(20, 0)),
-    "AMEX":   (time(4, 0), time(20, 0)),
-    "BATS":   (time(4, 0), time(20, 0)),
-    "IEX":    (time(4, 0), time(20, 0)),
-    "SMART":  (time(4, 0), time(20, 0)),
-    "CBOE":   (time(4, 0), time(20, 0)),
-    "TSX":    (time(7, 0), time(17, 0)),
-    "TSXV":   (time(7, 0), time(17, 0)),
-    "LSE":    (time(7, 0), time(17, 15)),
-    "IOB":    (time(7, 0), time(17, 15)),
-    "XETRA":  (time(8, 0), time(20, 0)),
-    "FWB":    (time(8, 0), time(20, 0)),
+    # US equities: 4 AM – 8 PM ET
+    "NYSE":   (time(4, 0),  time(20, 0)),
+    "NASDAQ": (time(4, 0),  time(20, 0)),
+    "ARCA":   (time(4, 0),  time(20, 0)),
+    "AMEX":   (time(4, 0),  time(20, 0)),
+    "BATS":   (time(4, 0),  time(20, 0)),
+    "IEX":    (time(4, 0),  time(20, 0)),
+    "SMART":  (time(4, 0),  time(20, 0)),
+    "CBOE":   (time(4, 0),  time(20, 0)),
+    # Canada: 7 AM – 5 PM ET
+    "TSX":    (time(7, 0),  time(17, 0)),
+    "TSXV":   (time(7, 0),  time(17, 0)),
+    # UK: 7 AM – 5:15 PM London
+    "LSE":    (time(7, 0),  time(17, 15)),
+    "IOB":    (time(7, 0),  time(17, 15)),
+    # Germany: 8 AM – 8 PM Berlin (Xetra extended)
+    "XETRA":  (time(8, 0),  time(20, 0)),
+    "FWB":    (time(8, 0),  time(20, 0)),
+    # France: 7:15 AM – 5:30 PM Paris
     "SBF":    (time(7, 15), time(17, 30)),
+    # Netherlands: 7:15 AM – 5:30 PM Amsterdam
     "AEB":    (time(7, 15), time(17, 30)),
+    # Australia: pre-open 7 AM, closing auction ends ~4:12 PM; use 7 AM – 5 PM Sydney
+    "ASX":    (time(7, 0),  time(17, 0)),
+    # Japan: pre-open 8 AM, night session ends 6 AM next day — cap at 4:30 PM Tokyo
+    "TSEJ":   (time(8, 0),  time(16, 30)),
+    "OSE":    (time(8, 0),  time(16, 30)),
+    # Hong Kong: pre-open 9 AM, no significant after-hours; use 9 AM – 5 PM HKT
+    "SEHK":   (time(9, 0),  time(17, 0)),
+    # Singapore: pre-open 8:30 AM, after-hours 5–7 PM SGT
+    "SGX":    (time(8, 30), time(19, 0)),
+    # India: pre-market 9 AM, closing session ends ~4 PM IST
+    "NSE":    (time(9, 0),  time(16, 0)),
+    "BSE":    (time(9, 0),  time(16, 0)),
 }
 
 

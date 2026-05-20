@@ -15,7 +15,7 @@ from app.strategies.clocks import WallClock
 from app.strategies.context import ExecutionContext
 from app.strategies.data_sources import LiveDataSource
 from app.strategies.routers import IBKRBridgeRouter
-from app.utils.market_hours import is_market_hours
+from app.utils.market_hours import is_trading_session
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +106,8 @@ async def _run_tick(assignment_id: int):
 @celery_app.task(name="app.workers.strategy_runner.run_strategy_tick")
 def run_strategy_tick(assignment_id: int, exchange: str = "NYSE"):
     """Entry point for Celery. Exchange-aware market hours check before running the tick."""
-    if not is_market_hours(exchange):
-        logger.debug(f"Outside market hours for {exchange}, skipping assignment {assignment_id}")
+    if not is_trading_session(exchange):
+        logger.debug(f"Outside trading session for {exchange}, skipping assignment {assignment_id}")
         return
     asyncio.run(_run_tick(assignment_id))
 
@@ -130,7 +130,7 @@ def dispatch_all_assignments():
     rows = asyncio.run(_fetch())
     dispatched = 0
     for aid, exchange in rows:
-        if is_market_hours(exchange):
+        if is_trading_session(exchange):
             run_strategy_tick.delay(aid, exchange)
             dispatched += 1
 

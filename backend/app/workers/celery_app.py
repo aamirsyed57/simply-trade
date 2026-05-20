@@ -36,7 +36,7 @@ celery_app.conf.beat_schedule = {
     "dispatch-strategy-ticks": {
         "task": "app.workers.strategy_runner.dispatch_all_assignments",
         # Every minute on weekdays. Hour restriction removed because exchanges span
-        # many timezones; the task checks is_market_hours(exchange) per assignment.
+        # many timezones; the task checks is_trading_session(exchange) per assignment.
         "schedule": crontab(minute="*/1", day_of_week="mon-fri"),
     },
     "reconcile-ibkr-ids": {
