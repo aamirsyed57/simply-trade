@@ -57,6 +57,7 @@ async def _run_tick(assignment_id: int):
             router=IBKRBridgeRouter(),
             portfolio_id=assignment.portfolio_id,
             mode=mode,
+            timeframe="1d",
         )
 
         # Merge assignment params with strategy defaults

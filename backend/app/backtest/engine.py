@@ -61,9 +61,14 @@ class BacktestEngine:
         if not strategy_cls:
             raise ValueError(f"Strategy '{backtest.strategy_code}' not found in registry")
 
+        # Strategy params come from the backtest record; strip engine-internal keys first.
+        raw_params = {k: v for k, v in (backtest.params or {}).items() if not k.startswith("__")}
         params = strategy_cls.ParamsModel().model_dump()
-        params.update(backtest.params or {})
+        params.update(raw_params)
         strategy = strategy_cls(params=params)
+
+        # How many bars to hold a position before forcing a close (0 = hold to end only).
+        exit_after_bars: int = int((backtest.params or {}).get("__exit_after_bars", 10))
 
         # Load symbols
         symbol_ids: list[int] = backtest.symbol_ids
@@ -73,7 +78,7 @@ class BacktestEngine:
             if sym:
                 symbols[sid] = sym
 
-        # Load all bars sorted by timestamp for all symbols
+        # Load all bars for the date range
         start_dt = datetime.combine(backtest.start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
         end_dt = datetime.combine(backtest.end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
 
@@ -95,7 +100,6 @@ class BacktestEngine:
                 f"timeframe={backtest.timeframe}, {start_dt}–{end_dt}"
             )
 
-        # Group bars by timestamp so we can iterate in chronological order
         from collections import defaultdict
         bars_by_ts: dict[datetime, list[HistoricalBar]] = defaultdict(list)
         for bar in all_bars:
@@ -103,18 +107,16 @@ class BacktestEngine:
 
         sorted_timestamps = sorted(bars_by_ts.keys())
 
-        # Setup
         clock = SimulatedClock(sorted_timestamps[0])
         router = SimulatedRouter()
         initial_capital = float(backtest.initial_capital)
 
         cash = initial_capital
-        positions: dict[int, dict] = {}  # symbol_id → {qty, avg_price}
+        # symbol_id → {qty, avg_price, entry_bar_idx, entry_ts}
+        positions: dict[int, dict] = {}
 
-        equity_curve = []
-        trade_log = []
-
-        # Pending signal for "next bar open" fill
+        equity_curve: list[dict] = []
+        trade_log: list[dict] = []
         pending_signals: list[dict] = []
 
         for i, ts in enumerate(sorted_timestamps):
@@ -144,16 +146,23 @@ class BacktestEngine:
                         logger.debug(f"Insufficient cash for BUY {sid}, skipping")
                         continue
                     cash -= float(total_cost)
-                    pos = positions.setdefault(sid, {"qty": Decimal("0"), "avg_price": Decimal("0")})
+                    pos = positions.setdefault(sid, {
+                        "qty": Decimal("0"), "avg_price": Decimal("0"),
+                        "entry_bar_idx": i, "entry_ts": ts.isoformat(),
+                    })
                     total_pos_cost = pos["qty"] * pos["avg_price"] + notional
                     pos["qty"] += qty
                     pos["avg_price"] = total_pos_cost / pos["qty"] if pos["qty"] > 0 else Decimal("0")
+                    pos["entry_bar_idx"] = i
+                    pos["entry_ts"] = sig.get("entry_ts", ts.isoformat())
+
                 else:  # SELL
                     pos = positions.get(sid)
                     if not pos or pos["qty"] <= 0:
                         continue
                     sell_qty = min(qty, pos["qty"])
-                    realized_pnl = sell_qty * (fill_price_d - pos["avg_price"]) - slippage - commission
+                    entry_avg = pos["avg_price"]
+                    realized_pnl = sell_qty * (fill_price_d - entry_avg) - slippage - commission
                     cash += float(sell_qty * fill_price_d - slippage - commission)
                     pos["qty"] -= sell_qty
                     if pos["qty"] == 0:
@@ -161,17 +170,37 @@ class BacktestEngine:
 
                     trade_log.append({
                         "symbol_id": sid,
-                        "direction": sig["direction"],
+                        "direction": "SELL",
                         "qty": float(sell_qty),
-                        "entry_price": float(pos["avg_price"]),
+                        "entry_price": float(entry_avg),
                         "exit_price": fill_price,
                         "pnl": float(realized_pnl),
                         "commission": float(commission),
                         "exit_ts": ts.isoformat(),
-                        "entry_ts": sig.get("entry_ts", ts.isoformat()),
+                        "entry_ts": pos.get("entry_ts", ts.isoformat()),
                     })
 
             pending_signals = new_pending
+
+            # --- Time-based auto-exit: queue SELL if held too long ---
+            if exit_after_bars > 0:
+                for sid, pos in positions.items():
+                    if pos["qty"] <= 0:
+                        continue
+                    bars_held = i - pos.get("entry_bar_idx", i)
+                    already_selling = any(
+                        p["symbol_id"] == sid and p["direction"] == "SELL"
+                        for p in pending_signals
+                    )
+                    if bars_held >= exit_after_bars and not already_selling:
+                        pending_signals.append({
+                            "symbol_id": sid,
+                            "direction": "SELL",
+                            "qty": float(pos["qty"]),
+                            "order_type": "MKT",
+                            "limit_price": None,
+                            "entry_ts": pos.get("entry_ts", ts.isoformat()),
+                        })
 
             # --- Compute equity ---
             unrealized = 0.0
@@ -196,10 +225,15 @@ class BacktestEngine:
                     router=router,
                     portfolio_id=None,
                     mode="backtest",
+                    timeframe=backtest.timeframe,
                 )
                 try:
                     signal = await strategy.generate_signal(sid, ctx)
                     if signal:
+                        # Skip duplicate BUY when already in position
+                        if signal.direction == "BUY" and positions.get(sid, {}).get("qty", Decimal("0")) > 0:
+                            logger.debug(f"Already in position for symbol {sid}, skipping BUY")
+                            continue
                         pending_signals.append({
                             "symbol_id": sid,
                             "direction": signal.direction,
@@ -211,8 +245,39 @@ class BacktestEngine:
                 except Exception as e:
                     logger.debug(f"Signal generation error at {ts}: {e}")
 
+        # --- Close all remaining open positions at the last bar's close ---
+        if sorted_timestamps:
+            last_ts = sorted_timestamps[-1]
+            last_bars = bars_by_ts[last_ts]
+            for sid, pos in positions.items():
+                if pos["qty"] <= 0:
+                    continue
+                bar_list = [b for b in last_bars if b.symbol_id == sid]
+                if not bar_list:
+                    continue
+                bar = bar_list[0]
+                fill_price_d = Decimal(str(bar.close))
+                qty = pos["qty"]
+                notional = qty * fill_price_d
+                slippage = notional * Decimal(str(backtest.slippage_bps)) / Decimal("10000")
+                commission = _calc_commission(qty, fill_price_d)
+                realized_pnl = qty * (fill_price_d - pos["avg_price"]) - slippage - commission
+                cash += float(qty * fill_price_d - slippage - commission)
+                trade_log.append({
+                    "symbol_id": sid,
+                    "direction": "SELL",
+                    "qty": float(qty),
+                    "entry_price": float(pos["avg_price"]),
+                    "exit_price": float(fill_price_d),
+                    "pnl": float(realized_pnl),
+                    "commission": float(commission),
+                    "exit_ts": last_ts.isoformat(),
+                    "entry_ts": pos.get("entry_ts", last_ts.isoformat()),
+                })
+                pos["qty"] = Decimal("0")
+
         # Compute metrics
-        metrics = compute_metrics(equity_curve, trade_log, initial_capital)
+        metrics = compute_metrics(equity_curve, trade_log, initial_capital, timeframe=backtest.timeframe)
         per_symbol = compute_per_symbol_metrics(trade_log)
 
         # Build drawdown curve

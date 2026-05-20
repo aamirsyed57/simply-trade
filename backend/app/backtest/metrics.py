@@ -10,11 +10,23 @@ def _safe_div(a: float, b: float, default: float = 0.0) -> float:
     return a / b if b != 0 else default
 
 
+# Trading bars per year per timeframe (approximate).
+# Used to annualise per-bar return statistics correctly.
+_BARS_PER_YEAR: dict[str, float] = {
+    "1m":  390 * 252,   # 98,280
+    "5m":  78 * 252,    # 19,656
+    "15m": 26 * 252,    # 6,552
+    "1h":  6.5 * 252,   # 1,638
+    "1d":  252.0,
+}
+
+
 def compute_metrics(
     equity_curve: list[dict[str, Any]],
     trades: list[dict[str, Any]],
     initial_capital: float,
     risk_free_rate: float = 0.05,
+    timeframe: str = "1d",
 ) -> dict[str, Any]:
     """
     Compute standard backtesting metrics.
@@ -25,6 +37,7 @@ def compute_metrics(
                          "entry_price", "exit_price", "pnl", "commission"}
         initial_capital: starting capital
         risk_free_rate: annualised risk-free rate (default 5%)
+        timeframe: bar timeframe used in the backtest (drives annualisation)
     """
     if not equity_curve:
         return {}
@@ -32,13 +45,14 @@ def compute_metrics(
     equities = [row["equity"] for row in equity_curve]
     final_equity = equities[-1]
 
+    bars_per_year = _BARS_PER_YEAR.get(timeframe, 252.0)
+
     # --- CAGR ---
     n_bars = len(equities)
-    # Assume each bar is 1 minute; 390 bars/day, 252 trading days/year
-    years = n_bars / (390 * 252) if n_bars > 1 else 1.0
+    years = n_bars / bars_per_year if n_bars > 1 else 1.0
     cagr = (_safe_div(final_equity, initial_capital) ** _safe_div(1.0, years) - 1.0) if years > 0 else 0.0
 
-    # --- Daily returns (approximate: group by day) ---
+    # --- Per-bar returns ---
     returns = [
         _safe_div(equities[i] - equities[i - 1], equities[i - 1])
         for i in range(1, len(equities))
@@ -47,8 +61,6 @@ def compute_metrics(
     n = len(returns)
     mean_ret = sum(returns) / n if n > 0 else 0.0
 
-    # Annualise assuming 390 * 252 1-min bars / year
-    bars_per_year = 390 * 252
     ann_return = mean_ret * bars_per_year
 
     variance = sum((r - mean_ret) ** 2 for r in returns) / n if n > 0 else 0.0
@@ -56,12 +68,12 @@ def compute_metrics(
     ann_std = std_ret * math.sqrt(bars_per_year)
 
     # --- Sharpe ---
-    daily_rfr = risk_free_rate / bars_per_year
+    bar_rfr = risk_free_rate / bars_per_year
     sharpe = _safe_div(ann_return - risk_free_rate, ann_std)
 
     # --- Sortino ---
-    downside_returns = [r for r in returns if r < daily_rfr]
-    downside_var = sum((r - daily_rfr) ** 2 for r in downside_returns) / n if n > 0 else 0.0
+    downside_returns = [r for r in returns if r < bar_rfr]
+    downside_var = sum((r - bar_rfr) ** 2 for r in downside_returns) / n if n > 0 else 0.0
     downside_std = math.sqrt(downside_var)
     ann_downside_std = downside_std * math.sqrt(bars_per_year)
     sortino = _safe_div(ann_return - risk_free_rate, ann_downside_std)

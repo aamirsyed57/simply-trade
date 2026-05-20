@@ -16,3 +16,4 @@ class ExecutionContext:
     router: OrderRouter
     portfolio_id: int
     mode: Literal["live", "paper", "backtest"]
+    timeframe: str = "1d"  # bar timeframe strategies should query; set by engine/runner

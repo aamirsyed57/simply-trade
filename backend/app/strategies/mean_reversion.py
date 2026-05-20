@@ -29,7 +29,7 @@ class MeanReversionStrategy(BaseStrategy):
         now = ctx.clock.now()
         start = now - timedelta(days=5)
         
-        df = await ctx.data.get_bars(symbol_id, "15m", start, now)
+        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
         periods = self.params.lookback_periods
         
         if len(df) < periods:

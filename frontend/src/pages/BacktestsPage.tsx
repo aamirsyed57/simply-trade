@@ -111,6 +111,7 @@ export function BacktestsPage() {
   const [endDate, setEndDate] = useState('2024-12-31');
   const [capital, setCapital] = useState('100000');
   const [timeframe, setTimeframe] = useState('1d');
+  const [exitAfterBars, setExitAfterBars] = useState('10');
   const [formError, setFormError] = useState('');
 
   const { data: btResult } = useQuery({
@@ -139,7 +140,7 @@ export function BacktestsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['backtests'] }); setSelected(null); },
   });
 
-  const resetForm = () => { setName(''); setStratCode(''); setSymIds([]); setFormError(''); };
+  const resetForm = () => { setName(''); setStratCode(''); setSymIds([]); setExitAfterBars('10'); setFormError(''); };
   const symbolMap = Object.fromEntries(symbols.map(s => [s.id, s.ticker]));
   const fmtUsd = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
@@ -308,7 +309,7 @@ export function BacktestsPage() {
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, padding: '8px 12px', background: 'rgba(79,125,243,0.08)', borderRadius: 6 }}>
               Runs synchronously (inline). Make sure historical data is imported for the selected symbols &amp; timeframe.
             </div>
-            <form onSubmit={e => { e.preventDefault(); if (!name || !stratCode || !symIds.length) return setFormError('Name, strategy, and at least one symbol required.'); createMutation.mutate({ name, strategy_code: stratCode, symbol_ids: symIds, start_date: startDate, end_date: endDate, initial_capital: parseFloat(capital), timeframe }); }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form onSubmit={e => { e.preventDefault(); if (!name || !stratCode || !symIds.length) return setFormError('Name, strategy, and at least one symbol required.'); createMutation.mutate({ name, strategy_code: stratCode, symbol_ids: symIds, start_date: startDate, end_date: endDate, initial_capital: parseFloat(capital), timeframe, exit_after_bars: parseInt(exitAfterBars) || 10 }); }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
               <Field label="Name"><input style={inp} value={name} onChange={e => setName(e.target.value)} placeholder="AAPL Q1 2024" /></Field>
               <Field label="Strategy">
@@ -339,6 +340,10 @@ export function BacktestsPage() {
               <Field label="Start Date"><input type="date" style={inp} value={startDate} onChange={e => setStartDate(e.target.value)} /></Field>
               <Field label="End Date"><input type="date" style={inp} value={endDate} onChange={e => setEndDate(e.target.value)} /></Field>
               <Field label="Initial Capital (USD)"><input type="number" style={inp} value={capital} onChange={e => setCapital(e.target.value)} min={1} /></Field>
+              <Field label="Auto-exit After (bars)" >
+                <input type="number" style={inp} value={exitAfterBars} onChange={e => setExitAfterBars(e.target.value)} min={0} />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Bars to hold before auto-selling. 0 = close only at end of backtest.</div>
+              </Field>
 
               {formError && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{formError}</div>}
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>

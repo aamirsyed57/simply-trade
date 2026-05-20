@@ -29,7 +29,7 @@ class OpeningRangeStrategy(BaseStrategy):
         now = ctx.clock.now()
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
-        df = await ctx.data.get_bars(symbol_id, "1m", start, now)
+        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
         if df.empty:
             return None
             

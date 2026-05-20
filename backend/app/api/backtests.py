@@ -29,6 +29,7 @@ class BacktestCreate(BaseModel):
     fill_model: FillModel = FillModel.NEXT_BAR_OPEN
     slippage_bps: int = 5
     commission_model: str = "ibkr_tiered"
+    exit_after_bars: int = 10  # auto-close position after this many bars; 0 = hold to end
 
 
 class BacktestRead(BaseModel):
@@ -72,7 +73,7 @@ async def create_backtest(payload: BacktestCreate, db: AsyncSession = Depends(ge
     backtest = Backtest(
         name=payload.name,
         strategy_code=payload.strategy_code,
-        params=payload.params,
+        params={**payload.params, "__exit_after_bars": payload.exit_after_bars},
         symbol_ids=payload.symbol_ids,
         timeframe=payload.timeframe,
         start_date=payload.start_date,
@@ -115,7 +116,7 @@ async def create_and_run_inline(payload: BacktestCreate, db: AsyncSession = Depe
     backtest = Backtest(
         name=payload.name,
         strategy_code=payload.strategy_code,
-        params=payload.params,
+        params={**payload.params, "__exit_after_bars": payload.exit_after_bars},
         symbol_ids=payload.symbol_ids,
         timeframe=payload.timeframe,
         start_date=payload.start_date,

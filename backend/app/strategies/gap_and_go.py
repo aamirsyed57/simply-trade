@@ -30,7 +30,7 @@ class GapAndGoStrategy(BaseStrategy):
         start = now - timedelta(days=5)
         
         # Fetch daily bars to check the gap
-        df = await ctx.data.get_bars(symbol_id, "1d", start, now)
+        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
         if len(df) < 2:
             return None
             

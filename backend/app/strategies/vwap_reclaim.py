@@ -30,7 +30,7 @@ class VwapReclaimStrategy(BaseStrategy):
         # Just need the day's data for VWAP
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
-        df = await ctx.data.get_bars(symbol_id, "5m", start, now)
+        df = await ctx.data.get_bars(symbol_id, ctx.timeframe, start, now)
         if len(df) < 3:
             return None
             
