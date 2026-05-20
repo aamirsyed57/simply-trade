@@ -50,6 +50,90 @@ MARKETS: dict[str, dict[str, Any]] = {
             "UNP", "BA", "IBM",
         ],
     },
+    "us_technology": {
+        "label": "US Technology",
+        "region": "United States",
+        "tickers": [
+            "AAPL", "MSFT", "NVDA", "GOOGL", "META", "AVGO", "AMD",
+            "ORCL", "CSCO", "QCOM", "IBM", "TXN", "INTC", "INTU",
+            "ADBE", "AMAT", "LRCX", "KLAC", "MRVL", "MU", "STX",
+            "WDC", "PANW", "CRWD", "FTNT", "ZS", "DDOG", "NET",
+            "SNOW", "PLTR", "MDB", "OKTA", "SHOP", "NOW", "WDAY",
+        ],
+    },
+    "us_healthcare": {
+        "label": "US Healthcare",
+        "region": "United States",
+        "tickers": [
+            "UNH", "JNJ", "LLY", "ABBV", "MRK", "TMO", "ABT", "BMY",
+            "AMGN", "GILD", "REGN", "VRTX", "BIIB", "ISRG", "MDT",
+            "SYK", "BSX", "BDX", "ZBH", "CVS", "CI", "HUM", "CNC",
+            "MCK", "CAH", "DXCM", "IDXX", "IQV", "A", "MTD", "MRNA",
+            "ILMN", "ALGN", "HOLX",
+        ],
+    },
+    "us_financials": {
+        "label": "US Financials",
+        "region": "United States",
+        "tickers": [
+            "JPM", "BAC", "WFC", "GS", "MS", "C", "BLK", "SCHW",
+            "AXP", "V", "MA", "COF", "USB", "TFC", "PNC", "MTB",
+            "FITB", "HBAN", "RF", "CFG", "SPGI", "MCO", "ICE", "CME",
+            "CBOE", "BX", "KKR", "APO", "AMP", "PRU",
+        ],
+    },
+    "us_energy": {
+        "label": "US Energy",
+        "region": "United States",
+        "tickers": [
+            "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "VLO", "PSX",
+            "HES", "OXY", "DVN", "FANG", "HAL", "BKR", "KMI", "WMB",
+            "OKE", "LNG", "EPD", "ET", "TRGP", "PXD", "APA", "MRO",
+            "CVI", "DINO",
+        ],
+    },
+    "us_consumer": {
+        "label": "US Consumer",
+        "region": "United States",
+        "tickers": [
+            "AMZN", "TSLA", "HD", "MCD", "NKE", "LOW", "SBUX", "TJX",
+            "BKNG", "ABNB", "CMG", "YUM", "DRI", "MAR", "HLT", "F",
+            "GM", "COST", "WMT", "TGT", "KR", "DLTR", "DG", "ORLY",
+            "AZO", "ROST", "BBY", "ETSY", "W", "RH",
+        ],
+    },
+    "us_industrials": {
+        "label": "US Industrials",
+        "region": "United States",
+        "tickers": [
+            "GE", "RTX", "HON", "UNP", "UPS", "BA", "LMT", "CAT",
+            "DE", "NOC", "GD", "LHX", "EMR", "ETN", "PH", "ROK",
+            "AME", "IR", "IEX", "CARR", "OTIS", "TT", "JCI", "FTV",
+            "LDOS", "SAIC", "CACI", "CSX", "NSC", "DAL",
+        ],
+    },
+    "us_midcap": {
+        "label": "S&P 400 MidCap",
+        "region": "United States",
+        "tickers": [
+            "FICO", "DECK", "RH", "POOL", "LSTR", "KNX", "CUBE",
+            "SFM", "WMS", "SLGN", "PRI", "WEX", "CVLT", "STAG",
+            "EGP", "REXR", "NNN", "FR", "GLPI", "VICI", "NTNX",
+            "GTLS", "MEDP", "FND", "BXMT", "CALM", "QLYS", "NOVT",
+            "CRVL", "TREX",
+        ],
+    },
+    "us_smallcap": {
+        "label": "Russell 2000 (Small Cap)",
+        "region": "United States",
+        "tickers": [
+            "SMCI", "MARA", "RIOT", "CLSK", "CIFR", "HUT", "BTBT",
+            "RDDT", "APP", "CELH", "AXSM", "ACLS", "UCTT", "AEIS",
+            "FORM", "ICHR", "ONTO", "KLIC", "MTSI", "COHU", "POWI",
+            "DIOD", "SITM", "AMBA", "ALGM", "SWKS", "QRVO", "MLKN",
+            "HTLF", "BANF",
+        ],
+    },
     "dax": {
         "label": "DAX 40",
         "region": "Europe",
