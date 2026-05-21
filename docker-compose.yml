@@ -33,11 +33,9 @@ services:
         condition: service_healthy
     command: >
       sh -c "mkdir -p logs && celery -A app.workers.celery_app worker --loglevel=info 2>&1 | tee logs/worker.log"
-    # Will fail until Phase 5 creates celery_app — that's expected.
-    profiles:
-      - worker
+    restart: unless-stopped
 
-  # --- Celery Beat ---
+  # --- Celery Beat (scheduler) ---
   beat:
     build:
       context: ./backend
@@ -49,10 +47,11 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     command: >
       sh -c "mkdir -p logs && celery -A app.workers.celery_app beat --loglevel=info 2>&1 | tee logs/beat.log"
-    profiles:
-      - worker
+    restart: unless-stopped
 
   # --- IBKR Bridge ---
   ibkr-bridge:

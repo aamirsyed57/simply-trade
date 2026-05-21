@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.workers.celery_app import celery_app
 from app.config import settings
-from app.database import AsyncSessionLocal
+from app.database import CelerySessionLocal as AsyncSessionLocal
 from app.models.ibkr_fill import IBKRFill
 from app.models.ibkr_order import IBKROrder
 from app.models.order import Order, OrderStatus

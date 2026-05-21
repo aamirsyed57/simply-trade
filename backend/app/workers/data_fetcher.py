@@ -9,7 +9,7 @@ import pandas as pd
 import yfinance as yf
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.database import AsyncSessionLocal
+from app.database import CelerySessionLocal as AsyncSessionLocal
 from app.models.historical_bar import HistoricalBar
 from app.models.symbol import Symbol
 from app.services.market_data_service import MarketDataService
