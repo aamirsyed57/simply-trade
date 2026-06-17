@@ -464,3 +464,101 @@ async def get_top_movers(
     result = await asyncio.get_event_loop().run_in_executor(None, _fetch_movers, market)
     _CACHE[market] = (now, result)
     return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Intraday bars endpoint — live yfinance proxy (no DB dependency)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class IntradayBar(BaseModel):
+    ts: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
+_VALID_INTERVALS = {"1m", "2m", "5m", "15m", "30m", "60m", "1h", "1d"}
+_VALID_PERIODS = {"1d", "5d", "7d", "1mo", "3mo", "6mo", "1y", "ytd", "5y"}
+
+# Short cache for intraday: {ticker+interval+period: (ts, bars)}
+_INTRADAY_CACHE: dict[str, tuple[float, list[IntradayBar]]] = {}
+_INTRADAY_TTL = 55  # seconds — slightly under a minute so data stays fresh
+
+
+def _fetch_intraday(ticker: str, period: str, interval: str) -> list[IntradayBar]:
+    """Download intraday OHLCV from yfinance and return as list of IntradayBar."""
+    try:
+        df = yf.download(
+            ticker,
+            period=period,
+            interval=interval,
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+        )
+    except Exception as exc:
+        raise ValueError(f"yfinance download failed for {ticker}: {exc}") from exc
+
+    if df.empty:
+        return []
+
+    # Flatten MultiIndex columns if present (happens with single ticker too sometimes)
+    if isinstance(df.columns, __import__("pandas").MultiIndex):
+        df.columns = [c[0] for c in df.columns]
+
+    bars: list[IntradayBar] = []
+    for ts, row in df.iterrows():
+        o = _safe_float(row.get("Open"))
+        h = _safe_float(row.get("High"))
+        lo = _safe_float(row.get("Low"))
+        c = _safe_float(row.get("Close"))
+        v = row.get("Volume", 0)
+        if o is None or h is None or lo is None or c is None:
+            continue
+        try:
+            vol = int(float(v)) if v is not None and not math.isnan(float(v)) else 0
+        except (TypeError, ValueError):
+            vol = 0
+        ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+        bars.append(IntradayBar(ts=ts_str, open=round(o, 4), high=round(h, 4), low=round(lo, 4), close=round(c, 4), volume=vol))
+    return bars
+
+
+@router.get(
+    "/intraday",
+    response_model=list[IntradayBar],
+    summary="Live intraday OHLCV bars for any ticker (yfinance proxy, no DB write)",
+    description=(
+        "Fetches intraday bars directly from Yahoo Finance without touching the database. "
+        "Results are cached for ~55 seconds. "
+        "**interval** options: 1m, 2m, 5m, 15m, 30m, 60m. "
+        "**period** options: 1d, 5d, 7d. "
+        "Note: 1m bars are only available for the last 7 days via yfinance."
+    ),
+)
+async def get_intraday(
+    ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
+    period: str = Query("1d", description="Look-back window: 1d, 5d, 7d"),
+    interval: str = Query("1m", description="Bar interval: 1m, 5m, 15m, 30m, 60m"),
+) -> list[IntradayBar]:
+    ticker = ticker.upper().strip()
+    if interval not in _VALID_INTERVALS:
+        raise HTTPException(status_code=400, detail=f"Invalid interval '{interval}'. Options: {', '.join(sorted(_VALID_INTERVALS))}")
+    if period not in _VALID_PERIODS:
+        raise HTTPException(status_code=400, detail=f"Invalid period '{period}'. Options: {', '.join(sorted(_VALID_PERIODS))}")
+
+    cache_key = f"{ticker}:{period}:{interval}"
+    now = time.monotonic()
+    cached = _INTRADAY_CACHE.get(cache_key)
+    if cached and now - cached[0] < _INTRADAY_TTL:
+        return cached[1]
+
+    try:
+        bars = await asyncio.get_event_loop().run_in_executor(None, _fetch_intraday, ticker, period, interval)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    _INTRADAY_CACHE[cache_key] = (now, bars)
+    return bars

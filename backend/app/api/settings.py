@@ -1,5 +1,6 @@
 import os
 import json
+import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -35,7 +36,9 @@ async def get_settings():
 
 @router.post("", response_model=NotificationSettings)
 async def update_settings(settings: NotificationSettings):
-    _save_settings(settings.model_dump())
+    existing = _load_settings()
+    merged = {**existing, **settings.model_dump()}
+    _save_settings(merged)
     
     # Also update config and notifier instance
     from app.config import settings as app_settings
@@ -63,3 +66,42 @@ async def test_notification():
         return {"status": "success", "message": "Test notification sent successfully."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@router.get("/chat-updates")
+async def get_chat_updates():
+    """Proxy getUpdates to help user find the correct chat ID."""
+    data = _load_settings()
+    bot_token = data.get("telegram_bot_token", "")
+    if not bot_token:
+        return {"status": "error", "message": "Bot token not configured.", "chats": []}
+
+    clean_token = bot_token
+    if clean_token.lower().startswith("bot"):
+        clean_token = clean_token[3:]
+
+    url = f"https://api.telegram.org/bot{clean_token}/getUpdates"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, params={"limit": 50, "offset": -50})
+            resp.raise_for_status()
+            result = resp.json()
+    except httpx.HTTPStatusError as e:
+        return {"status": "error", "message": f"Telegram API error {e.response.status_code}: {e.response.text}", "chats": []}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "chats": []}
+
+    updates = result.get("result", [])
+    seen: dict[str, dict] = {}
+    for update in updates:
+        for key in ("message", "channel_post", "my_chat_member"):
+            msg = update.get(key)
+            if not msg:
+                continue
+            chat = msg.get("chat", {})
+            cid = str(chat.get("id", ""))
+            if cid and cid not in seen:
+                name = chat.get("title") or f"{chat.get('first_name', '')} {chat.get('last_name', '')}".strip()
+                seen[cid] = {"id": cid, "name": name, "type": chat.get("type", "")}
+
+    return {"status": "ok", "chats": list(seen.values())}

@@ -1,4 +1,15 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:8000/openapi.json)",
+      "Bash(python3 -c \"import json,sys; paths=json.load\\(sys.stdin\\)['paths']; [print\\(p\\) for p in paths if 'historical' in p or 'yfinance' in p]\")",
+      "Bash(curl -s http://localhost:8000/api/v1/strategies)",
+      "Bash(curl -s http://localhost:8000/api/v1/symbols)",
+      "Bash(python3 -c \"import sys,json; [print\\(f\\\\\"{s['id']:3} {s['ticker']:10} {s['exchange']}\\\\\"\\) for s in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/historical?limit=5\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/historical/1?limit=5\")"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

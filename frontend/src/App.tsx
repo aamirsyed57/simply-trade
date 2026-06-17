@@ -13,6 +13,7 @@ import { ExchangeHoursPage } from './pages/ExchangeHoursPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ReconciliationPage } from './pages/ReconciliationPage';
 import { TopMoversPage } from './pages/TopMoversPage';
+import { LiveChartsPage } from './pages/LiveChartsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/exchange-hours" element={<ExchangeHoursPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/top-movers" element={<TopMoversPage />} />
+            <Route path="/charts" element={<LiveChartsPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>

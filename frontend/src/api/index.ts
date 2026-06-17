@@ -274,3 +274,25 @@ export const marketApi = {
   markets: () => request<MarketInfo[]>('/market/markets'),
   topMovers: (market: string) => request<TopMoversResponse>(`/market/top-movers?market=${encodeURIComponent(market)}`),
 };
+
+// ── Live Charts ──────────────────────────────────────────────────────────────
+
+export interface Bar {
+  ts: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export const historicalApi = {
+  bars: (symbolId: number, timeframe = '1m', limit = 200) =>
+    request<Bar[]>(`/historical/bars/${symbolId}?timeframe=${timeframe}&limit=${limit}`),
+};
+
+export const quoteApi = {
+  intraday: (ticker: string, period = '1d', interval = '1m') =>
+    request<Bar[]>(`/market/intraday?ticker=${encodeURIComponent(ticker)}&period=${period}&interval=${interval}`),
+};
+

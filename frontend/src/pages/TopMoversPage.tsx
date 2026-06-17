@@ -28,16 +28,7 @@ function fmtCap(v: number | null | undefined) {
   return `$${v.toFixed(0)}`;
 }
 
-function fmtPct(v: number | null | undefined) {
-  if (v == null) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
-  const sign = v >= 0 ? '+' : '';
-  const color = v >= 0 ? '#22c55e' : '#ef4444';
-  return (
-    <span style={{ color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-      {sign}{v.toFixed(2)}%
-    </span>
-  );
-}
+
 
 // ── Sparkline (pure SVG) ───────────────────────────────────────────────────
 
