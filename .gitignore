@@ -234,5 +234,7 @@ redis_data/
 migrations/__pycache__/
 *.resolved
 
-# Graphify 
 /graphify-out/
+
+# Runtime settings (contains Telegram credentials saved by the UI)
+backend/settings.json
