@@ -18,14 +18,18 @@ const DOJI_COLOR = '#7b8aaa';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtTime(ts: string): string {
+function fmtTime(ts: string, timezone?: string): string {
   const d = new Date(ts);
-  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+  if (timezone && timezone !== 'local') opts.timeZone = timezone;
+  return d.toLocaleTimeString('en-GB', opts);
 }
 
-function fmtDate(ts: string): string {
+function fmtDate(ts: string, timezone?: string): string {
   const d = new Date(ts);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' };
+  if (timezone && timezone !== 'local') opts.timeZone = timezone;
+  return d.toLocaleDateString('en-GB', opts);
 }
 
 function fmtPrice(v: number): string {
@@ -70,14 +74,14 @@ interface TooltipData {
   side: 'left' | 'right';
 }
 
-function Tooltip({ data }: { data: TooltipData }) {
+function Tooltip({ data, timezone }: { data: TooltipData; timezone?: string }) {
   const { bar, x, y, side } = data;
   const isUp = bar.close >= bar.open;
   const color = bar.close === bar.open ? DOJI_COLOR : isUp ? UP_COLOR : DOWN_COLOR;
   const change = bar.close - bar.open;
   const changePct = (change / bar.open) * 100;
   const w = 168;
-  const h = 138;
+  const h = 162;
   const tx = side === 'right' ? x + 12 : x - w - 12;
   const ty = Math.max(8, Math.min(y - h / 2, TOTAL_H - h - 8));
 
@@ -100,7 +104,7 @@ function Tooltip({ data }: { data: TooltipData }) {
           fontVariantNumeric: 'tabular-nums',
         }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-            {fmtDate(bar.ts)} · {fmtTime(bar.ts)}
+            {fmtDate(bar.ts, timezone)} · {fmtTime(bar.ts, timezone)}
           </div>
           {[
             ['O', bar.open],
@@ -170,9 +174,10 @@ export interface CandlestickChartProps {
   width: number;
   loading?: boolean;
   interval?: string;
+  timezone?: string;
 }
 
-export function CandlestickChart({ bars, width, loading, interval }: CandlestickChartProps) {
+export function CandlestickChart({ bars, width, loading, interval, timezone }: CandlestickChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
 
@@ -232,10 +237,43 @@ export function CandlestickChart({ bars, width, loading, interval }: Candlestick
   // Decide how many x-axis time labels to show (avoid crowding)
   const isIntraday = !interval || interval === '1m' || interval === '5m' || interval === '15m' || interval === '30m' || interval === '60m';
   const xLabelStep = Math.max(1, Math.ceil(n / Math.floor(plotW / 48)));
-  const xLabels: Array<{ i: number; label: string }> = [];
-  for (let i = 0; i < n; i += xLabelStep) {
-    xLabels.push({ i, label: isIntraday ? fmtTime(bars[i].ts) : fmtDate(bars[i].ts) });
+
+  // Find the first bar index of each new calendar day (in the display timezone) so
+  // intraday charts spanning multiple days can mark where one day ends and the next begins.
+  const dayBoundaries: number[] = [];
+  let prevDateStr: string | null = null;
+  for (let i = 0; i < n; i++) {
+    const d = fmtDate(bars[i].ts, timezone);
+    if (d !== prevDateStr) {
+      dayBoundaries.push(i);
+      prevDateStr = d;
+    }
   }
+  const isMultiDay = isIntraday && dayBoundaries.length > 1;
+  const boundarySet = new Set(dayBoundaries);
+
+  // Regularly spaced ticks, with day-boundary ticks taking priority over nearby regular ones.
+  const minGapPx = 42;
+  const labelIndices = new Set<number>();
+  for (let i = 0; i < n; i += xLabelStep) labelIndices.add(i);
+  if (isMultiDay) {
+    for (const bi of dayBoundaries) {
+      for (const ri of Array.from(labelIndices)) {
+        if (ri !== bi && Math.abs(toX(ri) - toX(bi)) < minGapPx) labelIndices.delete(ri);
+      }
+      labelIndices.add(bi);
+    }
+  }
+
+  const xLabels: Array<{ i: number; label: string; isBoundary: boolean }> = Array.from(labelIndices)
+    .sort((a, b) => a - b)
+    .map(i => {
+      const isBoundary = isMultiDay && boundarySet.has(i);
+      const label = isIntraday
+        ? isBoundary ? `${fmtDate(bars[i].ts, timezone)} ${fmtTime(bars[i].ts, timezone)}` : fmtTime(bars[i].ts, timezone)
+        : fmtDate(bars[i].ts, timezone);
+      return { i, label, isBoundary };
+    });
 
   return (
     <svg
@@ -268,10 +306,17 @@ export function CandlestickChart({ bars, width, loading, interval }: Candlestick
         );
       })}
 
+      {/* ── Day-boundary dividers ── */}
+      {xLabels.filter(l => l.isBoundary && l.i > 0).map(({ i }) => (
+        <line key={`div-${i}`} x1={toX(i)} y1={PAD_T} x2={toX(i)} y2={CHART_H + GAP_H + VOL_H}
+          stroke="rgba(255,255,255,0.1)" strokeWidth={1} strokeDasharray="2 3" />
+      ))}
+
       {/* ── X-axis labels ── */}
-      {xLabels.map(({ i, label }) => (
+      {xLabels.map(({ i, label, isBoundary }) => (
         <text key={i} x={toX(i)} y={CHART_H + 2}
-          fill="rgba(255,255,255,0.3)" fontSize={9.5} textAnchor="middle">
+          fill={isBoundary ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.3)'}
+          fontSize={9.5} fontWeight={isBoundary ? 700 : 400} textAnchor="middle">
           {label}
         </text>
       ))}
@@ -340,7 +385,7 @@ export function CandlestickChart({ bars, width, loading, interval }: Candlestick
       })}
 
       {/* ── Tooltip ── */}
-      {tooltip && <Tooltip data={tooltip} />}
+      {tooltip && <Tooltip data={tooltip} timezone={timezone} />}
     </svg>
   );
 }

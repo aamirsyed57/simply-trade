@@ -14,6 +14,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { ReconciliationPage } from './pages/ReconciliationPage';
 import { TopMoversPage } from './pages/TopMoversPage';
 import { LiveChartsPage } from './pages/LiveChartsPage';
+import { NewsPage } from './pages/NewsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/top-movers" element={<TopMoversPage />} />
             <Route path="/charts" element={<LiveChartsPage />} />
+            <Route path="/news" element={<NewsPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>

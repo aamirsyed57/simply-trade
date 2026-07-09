@@ -296,3 +296,22 @@ export const quoteApi = {
     request<Bar[]>(`/market/intraday?ticker=${encodeURIComponent(ticker)}&period=${period}&interval=${interval}`),
 };
 
+// ── News ─────────────────────────────────────────────────────────────────────
+
+export interface NewsItem {
+  id: string;
+  title: string;
+  summary: string | null;
+  publisher: string;
+  link: string;
+  published_at: string;
+  thumbnail: string | null;
+  tickers: string[];
+  content_type: string | null;
+}
+
+export const newsApi = {
+  list: (tickers: string[], limitPerTicker = 8) =>
+    request<NewsItem[]>(`/market/news?tickers=${encodeURIComponent(tickers.join(','))}&limit_per_ticker=${limitPerTicker}`),
+};
+

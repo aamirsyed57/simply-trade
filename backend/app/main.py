@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import assignments, ops, orders, portfolios, positions, strategies, symbols, historical, account, backtests, market_movers
+from app.api import assignments, ops, orders, portfolios, positions, strategies, symbols, historical, account, backtests, market_movers, news
 
 app = FastAPI(
     title="AutoTrader",
@@ -40,6 +40,7 @@ app.include_router(backtests.router, prefix="/api/v1")
 from app.api import settings
 app.include_router(settings.router, prefix="/api/v1")
 app.include_router(market_movers.router, prefix="/api/v1")
+app.include_router(news.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["ops"])
